@@ -102,14 +102,16 @@ class SecurityMonitor:
 
     def __init__(
         self,
-        docker_manager,
+        docker_manager=None,
+        *,
         alert_dispatcher: AlertDispatcher,
         security_profile: Optional[SecurityProfile] = None,
         cpu_threshold: float = 80.0,
         memory_threshold: float = 85.0,
         cpu_sustain_seconds: int = 30,
+        runtime=None,
     ):
-        self.dm = docker_manager
+        self.dm = runtime or docker_manager
         self.alerts = alert_dispatcher
         self.profile = security_profile or SecurityProfile()
         self.cpu_threshold = cpu_threshold

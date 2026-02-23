@@ -50,19 +50,54 @@ pip install -e ".[dev]"
 crabpot init
 ```
 
-This verifies that Docker is installed, the daemon is running, and Docker Compose is available. It also creates the CrabPot data directories.
+This launches an interactive wizard that walks you through initial setup. The wizard asks:
+
+1. **Deployment target** -- `docker` (standard Docker container) or `wsl2` (native WSL2 integration)
+2. **OpenClaw image tag** -- which OpenClaw version to use (e.g. `latest`, `0.9.1`)
+3. **Security preset** -- how much hardening to apply:
+   - `minimal` -- basic isolation, 4 CPU cores, 4 GB memory
+   - `standard` -- balanced security and performance, 2 CPU cores, 2 GB memory (recommended)
+   - `paranoid` -- maximum hardening with all 12 security layers, 1 CPU core, 1 GB memory
+4. **Prerequisite check** -- verifies Docker, Docker Compose, and daemon are available
+
+Once complete, the wizard generates `~/.crabpot/crabpot.yml` with your chosen settings.
 
 **Expected output:**
 ```
-CrabPot v1.0.0 — Checking prerequisites...
+CrabPot v2.0.0 — Setup Wizard
 
-Docker: Docker version 24.0.7, build afdd53b
-Docker daemon: running
-Docker Compose: available
-CrabPot home: /home/user/.crabpot
+[1/4] Deployment target
+  > docker
 
-All prerequisites satisfied.
+[2/4] OpenClaw image tag
+  > latest
+
+[3/4] Security preset
+  > standard
+
+[4/4] Checking prerequisites...
+  Docker: Docker version 24.0.7, build afdd53b
+  Docker daemon: running
+  Docker Compose: available
+
+Configuration written to ~/.crabpot/crabpot.yml
 Next: crabpot setup
+```
+
+#### Non-Interactive Mode
+
+You can skip the wizard by passing all options as flags:
+
+```bash
+crabpot init --target docker --preset standard --non-interactive
+```
+
+#### WSL2 Target
+
+To set up CrabPot with native WSL2 integration:
+
+```bash
+crabpot init --target wsl2
 ```
 
 ### Step 2: Setup
@@ -71,13 +106,13 @@ Next: crabpot setup
 crabpot setup
 ```
 
-This generates the hardened Docker configuration and builds the container image. The first build downloads the OpenClaw base image and applies security hardening, which may take a few minutes.
+This reads your `~/.crabpot/crabpot.yml` configuration, generates the Docker configs based on your chosen security preset, and builds the container image if `hardened_image` is enabled in your config. The first build downloads the OpenClaw base image and applies security hardening, which may take a few minutes.
 
 **What gets generated in `~/.crabpot/config/`:**
-- `docker-compose.yml` — Hardened container configuration
-- `Dockerfile.crabpot` — Security-stripped image build
-- `seccomp-profile.json` — System call whitelist (~120 allowed)
-- `.env` — OpenClaw environment variables (API keys, etc.)
+- `docker-compose.yml` -- Hardened container configuration (preset-specific)
+- `Dockerfile.crabpot` -- Security-stripped image build (if hardened_image is enabled)
+- `seccomp-profile.json` -- System call whitelist (preset-dependent)
+- `.env` -- OpenClaw environment variables (API keys, etc.)
 
 ### Step 3: Configure API Keys
 
@@ -138,14 +173,42 @@ The Gateway UI is OpenClaw's web interface where you connect messaging platforms
 
 ## Configuration
 
+CrabPot stores its configuration in `~/.crabpot/crabpot.yml`. This YAML file is created by `crabpot init` and controls all aspects of your sandbox, including the deployment target, security preset, resource limits, and image settings.
+
+### Viewing and Editing Configuration
+
+Use the `crabpot config` command to manage your configuration:
+
+```bash
+crabpot config show           # Display current configuration
+crabpot config edit           # Open crabpot.yml in your $EDITOR
+crabpot config reset          # Reset to defaults (re-runs the wizard)
+```
+
+### Security Presets
+
+The security preset determines which hardening layers are applied and the default resource limits:
+
+| Preset | CPU | Memory | PIDs | Hardening |
+|--------|-----|--------|------|-----------|
+| `minimal` | 4 cores | 4 GB | 200 | Basic isolation (dropped caps, read-only rootfs) |
+| `standard` | 2 cores | 2 GB | 200 | Balanced (seccomp, no-new-privileges, network restrictions) |
+| `paranoid` | 1 core | 1 GB | 100 | All 12 security layers enabled |
+
+Not all 12 security layers are active in every preset. Choose `paranoid` if you want full hardening, or `standard` for a good balance of security and usability.
+
 ### Resource Limits
 
-The default limits are:
-- **CPU**: 2 cores
-- **Memory**: 2 GB
-- **PIDs**: 200 processes
+Resource limits are set by default based on your chosen preset but can be overridden in `~/.crabpot/crabpot.yml`:
 
-To customize, edit `~/.crabpot/config/docker-compose.yml` under the `deploy.resources` section, then restart with `crabpot stop && crabpot start`.
+```yaml
+resources:
+  cpus: 3
+  memory: "3g"
+  pids: 150
+```
+
+After editing, apply changes with `crabpot stop && crabpot setup && crabpot start`.
 
 ### Ports
 

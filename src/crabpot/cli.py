@@ -18,9 +18,68 @@ from crabpot.paths import (
     CRABPOT_HOME,
     DATA_DIR,
     EGRESS_POLICY_FILE,
+    WSL2_DIR,
 )
 
 console = Console()
+
+
+# ── Shared helpers ────────────────────────────────────────────────────
+
+
+def _load_config_and_profile():
+    """Load config and resolve security/resource profiles.
+
+    Returns (config, profile, resources) or exits on validation error.
+    """
+    from crabpot.config import load_config, validate_config
+    from crabpot.security_presets import resolve_profile
+
+    config = load_config()
+    errors = validate_config(config)
+    if errors:
+        console.print("[red]Configuration errors:[/red]")
+        for e in errors:
+            console.print(f"  [red]{e}[/red]")
+        console.print(f"\nFix config at: [cyan]{CONFIG_FILE}[/cyan]")
+        sys.exit(1)
+
+    resource_overrides = {}
+    if config.resources.cpu_limit is not None:
+        resource_overrides["cpu_limit"] = config.resources.cpu_limit
+    if config.resources.memory_limit is not None:
+        resource_overrides["memory_limit"] = config.resources.memory_limit
+    if config.resources.pids_limit is not None:
+        resource_overrides["pids_limit"] = config.resources.pids_limit
+
+    profile, resources = resolve_profile(
+        config.security.preset,
+        overrides=config.security.overrides or None,
+        resource_overrides=resource_overrides or None,
+    )
+    return config, profile, resources
+
+
+def _create_runtime(config):
+    """Create the appropriate Runtime based on config.target.
+
+    Returns a Runtime instance (DockerRuntime or WSL2Runtime).
+    """
+    if config.target == "wsl2":
+        from crabpot.runtime import WSL2Runtime
+        from crabpot.wsl2_manager import WSL2Manager
+
+        wm = WSL2Manager(
+            distro_name=config.wsl2.distro_name,
+            wsl2_dir=WSL2_DIR,
+        )
+        return WSL2Runtime(wsl2_manager=wm)
+    else:
+        from crabpot.docker_manager import DockerManager
+        from crabpot.runtime import DockerRuntime
+
+        dm = DockerManager(config_dir=CONFIG_DIR)
+        return DockerRuntime(dm)
 
 
 def dispatch(args):
@@ -219,8 +278,6 @@ def cmd_setup(args):
         save_config,
         validate_config,
     )
-    from crabpot.config_generator import ConfigGenerator
-    from crabpot.docker_manager import DockerManager
     from crabpot.security_presets import resolve_profile
 
     console.print("[cyan]CrabPot Setup[/cyan]\n")
@@ -271,42 +328,88 @@ def cmd_setup(args):
     console.print(f"  Hardened image: [cyan]{profile.hardened_image}[/cyan]\n")
 
     if config.target == "docker":
-        # Generate configs
-        console.print("Generating Docker configuration...")
-        generator = ConfigGenerator(
-            config_dir=CONFIG_DIR,
-            security_profile=profile,
-            resource_profile=resources,
-            openclaw_tag=config.openclaw.image_tag,
-            egress_proxy_port=config.egress.proxy_port,
-        )
-        generator.generate_all()
-
-        summary = generator.get_config_summary()
-        console.print(f"  Config dir: [cyan]{summary['config_dir']}[/cyan]")
-        console.print(f"  Files: {', '.join(summary['files'])}")
-        console.print(f"  CPU limit: {summary['cpu_limit']} cores")
-        console.print(f"  Memory limit: {summary['memory_limit']}")
-        console.print(f"  PID limit: {summary['pids_limit']}")
-        console.print("[green]Configuration generated.[/green]\n")
-
-        # Build image (only needed if hardened or using build context)
-        if profile.hardened_image:
-            console.print("Building hardened Docker image (this may take a few minutes)...")
-            dm = DockerManager(config_dir=CONFIG_DIR)
-            dm.build()
-            console.print("[green]Image built.[/green]\n")
-        else:
-            console.print("[dim]No custom image build needed (using upstream image).[/dim]\n")
-
-        # Prompt for .env editing
-        env_path = CONFIG_DIR / ".env"
-        console.print(f"[yellow]Configure your API keys in:[/yellow] {env_path}")
-        console.print("Then run: [cyan]crabpot start[/cyan]")
-
+        _setup_docker(config, profile, resources)
     elif config.target == "wsl2":
-        console.print("[yellow]WSL2 setup will be available in a future update.[/yellow]")
-        console.print("For now, use [cyan]--target docker[/cyan].")
+        _setup_wsl2(config, profile, resources)
+
+
+def _setup_docker(config, profile, resources):
+    """Docker-specific setup: generate compose, optional hardened build."""
+    from crabpot.config_generator import ConfigGenerator
+    from crabpot.docker_manager import DockerManager
+
+    console.print("Generating Docker configuration...")
+    generator = ConfigGenerator(
+        config_dir=CONFIG_DIR,
+        security_profile=profile,
+        resource_profile=resources,
+        openclaw_tag=config.openclaw.image_tag,
+        egress_proxy_port=config.egress.proxy_port,
+    )
+    generator.generate_all()
+
+    summary = generator.get_config_summary()
+    console.print(f"  Config dir: [cyan]{summary['config_dir']}[/cyan]")
+    console.print(f"  Files: {', '.join(summary['files'])}")
+    console.print(f"  CPU limit: {summary['cpu_limit']} cores")
+    console.print(f"  Memory limit: {summary['memory_limit']}")
+    console.print(f"  PID limit: {summary['pids_limit']}")
+    console.print("[green]Configuration generated.[/green]\n")
+
+    # Build image (only needed if hardened or using build context)
+    if profile.hardened_image:
+        console.print("Building hardened Docker image (this may take a few minutes)...")
+        dm = DockerManager(config_dir=CONFIG_DIR)
+        dm.build()
+        console.print("[green]Image built.[/green]\n")
+    else:
+        console.print("[dim]No custom image build needed (using upstream image).[/dim]\n")
+
+    # Prompt for .env editing
+    env_path = CONFIG_DIR / ".env"
+    console.print(f"[yellow]Configure your API keys in:[/yellow] {env_path}")
+    console.print("Then run: [cyan]crabpot start[/cyan]")
+
+
+def _setup_wsl2(config, profile, resources):
+    """WSL2-specific setup: create distribution, apply security, install OpenClaw."""
+    from crabpot.config_generator import ConfigGenerator
+    from crabpot.wsl2_manager import WSL2Manager
+
+    console.print("Setting up WSL2 distribution...")
+    wm = WSL2Manager(
+        distro_name=config.wsl2.distro_name,
+        wsl2_dir=WSL2_DIR,
+    )
+
+    console.print(f"  Distro: [cyan]{config.wsl2.distro_name}[/cyan]")
+    console.print(f"  Base image: [cyan]{config.wsl2.base_image}[/cyan]")
+    console.print("  Creating distribution (this may take a few minutes)...")
+
+    wm.create_distro(
+        config=config,
+        security_profile=profile,
+        resource_profile=resources,
+    )
+    console.print("[green]WSL2 distribution created.[/green]\n")
+
+    # Generate egress allowlist (shared between Docker and WSL2)
+    console.print("Generating egress policy files...")
+    generator = ConfigGenerator(
+        config_dir=CONFIG_DIR,
+        security_profile=profile,
+        resource_profile=resources,
+        openclaw_tag=config.openclaw.image_tag,
+        egress_proxy_port=config.egress.proxy_port,
+    )
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    generator._generate_egress_allowlist()
+    generator._generate_env_file()
+    console.print("[green]Egress policy generated.[/green]\n")
+
+    env_path = CONFIG_DIR / ".env"
+    console.print(f"[yellow]Configure your API keys in:[/yellow] {env_path}")
+    console.print("Then run: [cyan]crabpot start[/cyan]")
 
 
 # ── Config command ─────────────────────────────────────────────────────
@@ -339,7 +442,10 @@ def cmd_config(args):
         if config.security.overrides:
             active = {k: v for k, v in config.security.overrides.items() if v is not None}
             if active:
-                table.add_row("Overrides", ", ".join(f"{k}={v}" for k, v in active.items()))
+                table.add_row(
+                    "Overrides",
+                    ", ".join(f"{k}={v}" for k, v in active.items()),
+                )
 
         if config.resources.cpu_limit:
             table.add_row("CPU limit", config.resources.cpu_limit)
@@ -376,41 +482,23 @@ def cmd_config(args):
 
 
 def cmd_start(args):
-    """Launch container + egress proxy + dashboard + security monitor."""
+    """Launch runtime + egress proxy + dashboard + security monitor."""
     from crabpot.action_gate import ActionGate
     from crabpot.alerts import AlertDispatcher
-    from crabpot.config import load_config
     from crabpot.dashboard import DashboardServer
-    from crabpot.docker_manager import DockerManager
     from crabpot.egress_policy import EgressPolicy
     from crabpot.egress_proxy import EgressProxy
     from crabpot.monitor import SecurityMonitor
-    from crabpot.security_presets import resolve_profile
 
     console.print("[cyan]Starting CrabPot...[/cyan]\n")
 
-    # Load config and resolve profile
-    config = load_config()
-    resource_overrides = {}
-    if config.resources.cpu_limit is not None:
-        resource_overrides["cpu_limit"] = config.resources.cpu_limit
-    if config.resources.memory_limit is not None:
-        resource_overrides["memory_limit"] = config.resources.memory_limit
-    if config.resources.pids_limit is not None:
-        resource_overrides["pids_limit"] = config.resources.pids_limit
-
-    profile, resources = resolve_profile(
-        config.security.preset,
-        overrides=config.security.overrides or None,
-        resource_overrides=resource_overrides or None,
-    )
-
-    dm = DockerManager(config_dir=CONFIG_DIR)
+    config, profile, resources = _load_config_and_profile()
+    runtime = _create_runtime(config)
 
     # Set up alerts
     alerts = AlertDispatcher(data_dir=DATA_DIR)
 
-    # Start the egress proxy (must be up before container starts)
+    # Start the egress proxy (must be up before runtime starts)
     proxy = None
     if profile.egress_proxy:
         console.print("Starting egress proxy (network policy enforcement)...")
@@ -423,14 +511,19 @@ def cmd_start(args):
         policy = None
         gate = None
 
-    # Start the container
-    console.print("Starting container...")
-    dm.start()
-    console.print("[green]Container started.[/green]")
+    # Start the runtime
+    target_label = "container" if config.target == "docker" else "WSL2 distro"
+    console.print(f"Starting {target_label}...")
+    runtime.start()
+    console.print(f"[green]{target_label.capitalize()} started.[/green]")
 
     # Start the security monitor (with conditional watchers)
     console.print("Starting security monitor...")
-    monitor = SecurityMonitor(docker_manager=dm, alert_dispatcher=alerts, security_profile=profile)
+    monitor = SecurityMonitor(
+        runtime=runtime,
+        alert_dispatcher=alerts,
+        security_profile=profile,
+    )
     monitor.start()
     active_count = len(monitor._threads)
     console.print(f"[green]Security monitor active ({active_count} channels).[/green]")
@@ -438,7 +531,7 @@ def cmd_start(args):
     # Start the dashboard
     console.print("Starting web dashboard...")
     dashboard = DashboardServer(
-        docker_manager=dm,
+        runtime=runtime,
         alert_dispatcher=alerts,
         security_monitor=monitor,
         action_gate=gate,
@@ -456,10 +549,12 @@ def cmd_start(args):
     console.print(f"  CrabPot Dashboard: [cyan]http://localhost:{config.dashboard.port}[/cyan]")
     if proxy:
         console.print(
-            f"  Egress Proxy:     [cyan]http://localhost:{config.egress.proxy_port}[/cyan]"
+            f"  Egress Proxy:      [cyan]http://localhost:{config.egress.proxy_port}[/cyan]"
         )
     console.print("  TUI: [cyan]crabpot tui[/cyan]")
-    console.print(f"  Preset: [cyan]{config.security.preset}[/cyan]")
+    console.print(
+        f"  Target: [cyan]{config.target}[/cyan]  Preset: [cyan]{config.security.preset}[/cyan]"
+    )
     console.print("\nPress Ctrl+C to stop.")
 
     # Block until interrupt
@@ -475,56 +570,60 @@ def cmd_start(args):
 
     console.print("\n[yellow]Shutting down...[/yellow]")
     monitor.stop()
-    dm.stop()
+    runtime.stop()
     if proxy:
         proxy.stop()
     console.print("[green]CrabPot stopped.[/green]")
 
 
 def cmd_stop(args):
-    """Graceful shutdown of container and all components."""
-    from crabpot.docker_manager import DockerManager
+    """Graceful shutdown of runtime and all components."""
+    from crabpot.config import load_config
 
     console.print("[yellow]Stopping CrabPot...[/yellow]")
-    dm = DockerManager(config_dir=CONFIG_DIR)
+    config = load_config()
+    runtime = _create_runtime(config)
 
-    status = dm.get_status()
+    status = runtime.get_status()
     if status == "not_found":
-        console.print("[yellow]Container not found.[/yellow]")
+        console.print("[yellow]CrabPot is not running.[/yellow]")
         return
 
-    dm.stop()
+    runtime.stop()
     console.print("[green]CrabPot stopped.[/green]")
 
 
 def cmd_pause(args):
-    """Freeze the container (zero CPU, memory preserved)."""
-    from crabpot.docker_manager import DockerManager
+    """Freeze the runtime (zero CPU, memory preserved)."""
+    from crabpot.config import load_config
 
-    dm = DockerManager(config_dir=CONFIG_DIR)
-    dm.pause()
+    config = load_config()
+    runtime = _create_runtime(config)
+    runtime.pause()
     console.print("[yellow]CrabPot paused (frozen).[/yellow]")
     console.print("Resume with: [cyan]crabpot resume[/cyan]")
 
 
 def cmd_resume(args):
-    """Unfreeze a paused container."""
-    from crabpot.docker_manager import DockerManager
+    """Unfreeze a paused runtime."""
+    from crabpot.config import load_config
 
-    dm = DockerManager(config_dir=CONFIG_DIR)
-    dm.resume()
+    config = load_config()
+    runtime = _create_runtime(config)
+    runtime.resume()
     console.print("[green]CrabPot resumed.[/green]")
 
 
 def cmd_tui(args):
     """Launch the interactive terminal dashboard."""
     from crabpot.alerts import AlertDispatcher
-    from crabpot.docker_manager import DockerManager
+    from crabpot.config import load_config
     from crabpot.tui import TUI
 
-    dm = DockerManager(config_dir=CONFIG_DIR)
+    config = load_config()
+    runtime = _create_runtime(config)
     alerts = AlertDispatcher(data_dir=DATA_DIR)
-    tui = TUI(docker_manager=dm, alert_dispatcher=alerts)
+    tui = TUI(runtime=runtime, alert_dispatcher=alerts)
     tui.run()
 
 
@@ -532,20 +631,20 @@ def cmd_status(args):
     """Show a one-shot status summary."""
     from crabpot.alerts import AlertDispatcher
     from crabpot.config import load_config
-    from crabpot.docker_manager import DockerManager
 
-    dm = DockerManager(config_dir=CONFIG_DIR)
-    alerts = AlertDispatcher(data_dir=DATA_DIR)
     config = load_config()
+    runtime = _create_runtime(config)
+    alerts = AlertDispatcher(data_dir=DATA_DIR)
 
-    status = dm.get_status()
-    health = dm.get_health()
-    start_time = dm.get_start_time()
+    status = runtime.get_status()
+    health = runtime.get_health()
+    start_time = runtime.get_start_time()
 
     status_colors = {
         "running": "green",
         "paused": "yellow",
         "exited": "red",
+        "stopped": "red",
         "not_found": "red",
     }
     color = status_colors.get(status, "white")
@@ -560,7 +659,7 @@ def cmd_status(args):
         console.print(f"  Started: {start_time}")
 
     if status == "running":
-        stats = dm.stats_snapshot()
+        stats = runtime.stats_snapshot()
         if stats:
             console.print(f"  CPU:    {stats['cpu_percent']}%")
             mem_mb = stats["memory_usage"] / (1024 * 1024)
@@ -577,9 +676,11 @@ def cmd_status(args):
     if recent:
         console.print(f"\n  [bold]Recent Alerts ({len(recent)}):[/bold]")
         for a in recent:
-            sev_color = {"CRITICAL": "red", "WARNING": "yellow", "INFO": "blue"}.get(
-                a.get("severity", ""), "white"
-            )
+            sev_color = {
+                "CRITICAL": "red",
+                "WARNING": "yellow",
+                "INFO": "blue",
+            }.get(a.get("severity", ""), "white")
             console.print(
                 f"    [{sev_color}]{a.get('severity', '?')}[/{sev_color}] "
                 f"{a.get('timestamp', '?')} — {a.get('message', '')}"
@@ -588,17 +689,18 @@ def cmd_status(args):
 
 
 def cmd_logs(args):
-    """Stream or tail container logs."""
-    from crabpot.docker_manager import DockerManager
+    """Stream or tail logs."""
+    from crabpot.config import load_config
 
-    dm = DockerManager(config_dir=CONFIG_DIR)
+    config = load_config()
+    runtime = _create_runtime(config)
 
-    if dm.get_status() == "not_found":
-        console.print("[red]Container not found. Is CrabPot running?[/red]")
+    if runtime.get_status() == "not_found":
+        console.print("[red]CrabPot is not running.[/red]")
         sys.exit(1)
 
     try:
-        for line in dm.get_logs(follow=args.follow, tail=args.tail):
+        for line in runtime.get_logs(follow=args.follow, tail=args.tail):
             console.print(line, highlight=False)
     except KeyboardInterrupt:
         pass
@@ -623,7 +725,11 @@ def cmd_alerts(args):
 
     for alert in history:
         sev = alert.get("severity", "?")
-        sev_style = {"CRITICAL": "bold red", "WARNING": "yellow", "INFO": "blue"}.get(sev, "")
+        sev_style = {
+            "CRITICAL": "bold red",
+            "WARNING": "yellow",
+            "INFO": "blue",
+        }.get(sev, "")
         table.add_row(
             alert.get("timestamp", "?"),
             f"[{sev_style}]{sev}[/{sev_style}]",
@@ -634,40 +740,48 @@ def cmd_alerts(args):
 
 
 def cmd_shell(args):
-    """Open an emergency interactive shell into the container."""
-    from crabpot.docker_manager import DockerManager
+    """Open an interactive shell into the runtime."""
+    from crabpot.config import load_config
 
-    dm = DockerManager(config_dir=CONFIG_DIR)
-    if dm.get_status() != "running":
-        console.print("[red]Container is not running.[/red]")
+    config = load_config()
+    runtime = _create_runtime(config)
+
+    if runtime.get_status() != "running":
+        console.print("[red]CrabPot is not running.[/red]")
         sys.exit(1)
 
     console.print("[yellow]Opening emergency shell (type 'exit' to leave)...[/yellow]")
-    subprocess.run(
-        ["docker", "exec", "-it", "crabpot", "/bin/sh"],
-        check=False,
-    )
+    runtime.open_shell()
 
 
 def cmd_destroy(args):
-    """Full teardown: stop container, remove volumes, clean configs."""
-    from crabpot.docker_manager import DockerManager
+    """Full teardown: stop runtime, remove all resources."""
+    from crabpot.config import load_config
 
-    console.print("[bold red]This will destroy the CrabPot container and all its data.[/bold red]")
+    console.print(
+        "[bold red]This will destroy the CrabPot environment and all its data.[/bold red]"
+    )
     confirm = input("Type 'destroy' to confirm: ").strip()
     if confirm != "destroy":
         console.print("[yellow]Aborted.[/yellow]")
         return
 
-    dm = DockerManager(config_dir=CONFIG_DIR)
+    config = load_config()
+    runtime = _create_runtime(config)
+
     console.print("Destroying CrabPot...")
-    dm.destroy()
+    runtime.destroy()
 
     # Remove generated configs (but not .env to preserve API keys)
-    for name in ["docker-compose.yml", "Dockerfile.crabpot", "seccomp-profile.json"]:
-        path = CONFIG_DIR / name
-        if path.exists():
-            path.unlink()
+    if config.target == "docker":
+        for name in [
+            "docker-compose.yml",
+            "Dockerfile.crabpot",
+            "seccomp-profile.json",
+        ]:
+            path = CONFIG_DIR / name
+            if path.exists():
+                path.unlink()
 
     console.print("[green]CrabPot destroyed.[/green]")
     console.print("To start fresh: [cyan]crabpot setup && crabpot start[/cyan]")
@@ -682,12 +796,13 @@ def cmd_uninstall(args):
         console.print("[yellow]Aborted.[/yellow]")
         return
 
-    # Stop container if running
+    # Stop runtime if running
     try:
-        from crabpot.docker_manager import DockerManager
+        from crabpot.config import load_config
 
-        dm = DockerManager(config_dir=CONFIG_DIR)
-        dm.destroy()
+        config = load_config()
+        runtime = _create_runtime(config)
+        runtime.destroy()
     except Exception:
         pass
 
@@ -735,7 +850,7 @@ def cmd_policy(args):
             console.print(f"\n[bold]Session-approved:[/bold] {', '.join(session)}")
         console.print(
             f"\n[dim]Unknown domains: {policy.unknown_action} "
-            f"(approve via dashboard or 'crabpot approve <domain>')[/dim]"
+            "(approve via dashboard or 'crabpot approve <domain>')[/dim]"
         )
 
     elif action == "add":

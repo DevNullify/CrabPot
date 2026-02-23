@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# CrabPot Installer — curl -fsSL https://crabpot.run/install.sh | sh
+# CrabPot Installer — curl -fsSL https://raw.githubusercontent.com/DevNullify/crabpot/main/install.sh | sh
 set -euo pipefail
 
-CRABPOT_VERSION="1.0.0"
+CRABPOT_VERSION="2.0.0"
 CRABPOT_HOME="${CRABPOT_HOME:-$HOME/.crabpot}"
-REPO_URL="https://github.com/OWNER/crabpot"  # TODO: set real repo
+REPO_URL="https://github.com/DevNullify/crabpot"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -35,9 +35,9 @@ fi
 IS_WSL=false
 if grep -qi microsoft /proc/version 2>/dev/null; then
     IS_WSL=true
-    info "WSL2 detected"
+    info "WSL2 detected — both Docker and WSL2 deployment targets are available"
 else
-    info "Native Linux detected"
+    info "Native Linux detected — Docker deployment target available"
 fi
 
 # ── 2. Check / install Docker ────────────────────────────────────────
@@ -59,15 +59,15 @@ else
     ok "Docker installed (you may need to log out/in for group changes)"
 fi
 
-# ── 3. Check / install Python 3.8+ ──────────────────────────────────
+# ── 3. Check / install Python 3.9+ ──────────────────────────────────
 if command -v python3 &>/dev/null; then
     PY_VERSION=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
     PY_MAJOR=$(echo "$PY_VERSION" | cut -d. -f1)
     PY_MINOR=$(echo "$PY_VERSION" | cut -d. -f2)
-    if [[ "$PY_MAJOR" -ge 3 && "$PY_MINOR" -ge 8 ]]; then
+    if [[ "$PY_MAJOR" -ge 3 && "$PY_MINOR" -ge 9 ]]; then
         ok "Python $PY_VERSION found"
     else
-        fail "Python 3.8+ required, found $PY_VERSION"
+        fail "Python 3.9+ required, found $PY_VERSION"
     fi
 else
     info "Installing Python 3..."
@@ -142,8 +142,12 @@ echo "Next steps:"
 echo "  1. Restart your shell or run:"
 echo -e "     ${CYAN}export PATH=\"\$HOME/.crabpot/bin:\$PATH\"${NC}"
 echo ""
-echo "  2. Initialize and set up:"
-echo -e "     ${CYAN}crabpot init${NC}     # Verify prerequisites"
-echo -e "     ${CYAN}crabpot setup${NC}    # Build image + onboarding"
+echo "  2. Run the interactive setup wizard:"
+echo -e "     ${CYAN}crabpot init${NC}     # Choose target, security level, OpenClaw version"
+echo -e "     ${CYAN}crabpot setup${NC}    # Generate configs + build"
 echo -e "     ${CYAN}crabpot start${NC}    # Launch everything"
 echo ""
+if $IS_WSL; then
+    echo "  WSL2 detected — you can choose 'docker' or 'wsl2' target during init."
+    echo ""
+fi
