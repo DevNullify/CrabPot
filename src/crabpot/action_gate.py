@@ -87,12 +87,14 @@ class ActionGate:
 
         with self._lock:
             self._pending.pop(domain, None)
-            self._history.append({
-                "domain": domain,
-                "port": port,
-                "decision": "approved" if approved else "denied",
-                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
-            })
+            self._history.append(
+                {
+                    "domain": domain,
+                    "port": port,
+                    "decision": "approved" if approved else "denied",
+                    "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                }
+            )
 
         if approved:
             self._log_decision(domain, "APPROVED")
@@ -143,9 +145,7 @@ class ActionGate:
                 {
                     "domain": req.domain,
                     "port": req.port,
-                    "timestamp": time.strftime(
-                        "%H:%M:%S", time.localtime(req.timestamp)
-                    ),
+                    "timestamp": time.strftime("%H:%M:%S", time.localtime(req.timestamp)),
                     "waiting_seconds": int(time.time() - req.timestamp),
                 }
                 for req in self._pending.values()

@@ -15,23 +15,65 @@ logger = logging.getLogger(__name__)
 
 # Suspicious process names that should never run inside the sandbox
 SUSPICIOUS_PROCESSES = {
-    "sh", "bash", "dash", "zsh", "fish", "csh", "tcsh",
-    "python", "python3", "perl", "ruby", "php", "lua",
-    "nc", "ncat", "nmap", "socat", "telnet",
-    "gcc", "cc", "make", "ld",
+    "sh",
+    "bash",
+    "dash",
+    "zsh",
+    "fish",
+    "csh",
+    "tcsh",
+    "python",
+    "python3",
+    "perl",
+    "ruby",
+    "php",
+    "lua",
+    "nc",
+    "ncat",
+    "nmap",
+    "socat",
+    "telnet",
+    "gcc",
+    "cc",
+    "make",
+    "ld",
 }
 
 # Log patterns that indicate problems (ordered by severity)
 LOG_PATTERNS = [
     # ── Prompt injection / exfiltration attempts ──
-    (r"(?i)\b(curl|wget|fetch|http\.get|axios|request)\b.*(?:\bhttp[s]?://)", "CRITICAL", "Outbound HTTP call attempted"),
-    (r"(?i)\b(eval|exec|system|popen|subprocess|child_process\.exec)\b", "CRITICAL", "Dynamic code execution detected"),
-    (r"(?i)\b(apt|apt-get|pip|npm|yarn)\b\s+install\b", "CRITICAL", "Package installation attempted"),
+    (
+        r"(?i)\b(curl|wget|fetch|http\.get|axios|request)\b.*(?:\bhttp[s]?://)",
+        "CRITICAL",
+        "Outbound HTTP call attempted",
+    ),
+    (
+        r"(?i)\b(eval|exec|system|popen|subprocess|child_process\.exec)\b",
+        "CRITICAL",
+        "Dynamic code execution detected",
+    ),
+    (
+        r"(?i)\b(apt|apt-get|pip|npm|yarn)\b\s+install\b",
+        "CRITICAL",
+        "Package installation attempted",
+    ),
     (r"(?i)\b(chmod|chown|chgrp)\b.*\b\+[rwxs]\b", "WARNING", "Permission change attempted"),
-    (r"(?i)\b(base64|xxd|openssl)\b.*\b(decode|enc|enc)\b", "WARNING", "Encoding/decoding tool usage"),
-    (r"(?i)\b(env|printenv|set)\b.*\b(KEY|SECRET|TOKEN|PASSWORD)\b", "CRITICAL", "Environment variable enumeration"),
+    (
+        r"(?i)\b(base64|xxd|openssl)\b.*\b(decode|enc|enc)\b",
+        "WARNING",
+        "Encoding/decoding tool usage",
+    ),
+    (
+        r"(?i)\b(env|printenv|set)\b.*\b(KEY|SECRET|TOKEN|PASSWORD)\b",
+        "CRITICAL",
+        "Environment variable enumeration",
+    ),
     (r"(?i)/etc/(passwd|shadow|hosts|resolv)", "CRITICAL", "Sensitive file access attempted"),
-    (r"(?i)\b(whoami|hostname|ifconfig|ip\s+addr|uname)\b", "WARNING", "System reconnaissance detected"),
+    (
+        r"(?i)\b(whoami|hostname|ifconfig|ip\s+addr|uname)\b",
+        "WARNING",
+        "System reconnaissance detected",
+    ),
     # ── General error patterns ──
     (r"(?i)\b(ERROR|FATAL|CRITICAL)\b", "WARNING", "Error detected in logs"),
     (r"(?i)\b(panic|segfault|core dump)\b", "WARNING", "Crash pattern in logs"),
@@ -119,7 +161,9 @@ class SecurityMonitor:
 
         channel_count = len(self._threads)
         if channel_count > 0:
-            self.alerts.fire("INFO", "monitor", f"Security monitor started ({channel_count} channels)")
+            self.alerts.fire(
+                "INFO", "monitor", f"Security monitor started ({channel_count} channels)"
+            )
 
     def stop(self) -> None:
         """Signal all watcher threads to stop."""
@@ -158,7 +202,8 @@ class SecurityMonitor:
         try:
             self.dm.pause()
             self.alerts.fire(
-                "CRITICAL", "auto-pause",
+                "CRITICAL",
+                "auto-pause",
                 f"Container auto-frozen: {reason}. Resume with 'crabpot resume'.",
             )
         except Exception as e:
@@ -193,7 +238,8 @@ class SecurityMonitor:
                         self._cpu_high_since = now
                     elif (now - self._cpu_high_since) >= self.cpu_sustain_seconds:
                         self.alerts.fire(
-                            "WARNING", "stats",
+                            "WARNING",
+                            "stats",
                             f"CPU at {stats['cpu_percent']}% for {self.cpu_sustain_seconds}s",
                         )
                         self._cpu_high_since = now
@@ -205,7 +251,8 @@ class SecurityMonitor:
                     now = time.time()
                     if (now - self._last_memory_alert) >= MEMORY_ALERT_COOLDOWN:
                         self.alerts.fire(
-                            "WARNING", "stats",
+                            "WARNING",
+                            "stats",
                             f"Memory at {stats['memory_percent']}% "
                             f"({stats['memory_usage'] // (1024 * 1024)}MB)",
                         )
@@ -238,7 +285,8 @@ class SecurityMonitor:
 
                     if base_cmd in SUSPICIOUS_PROCESSES:
                         self.alerts.fire(
-                            "CRITICAL", "processes",
+                            "CRITICAL",
+                            "processes",
                             f"Suspicious process detected: {cmd}",
                         )
                         self._auto_pause(f"Suspicious process: {base_cmd}")
@@ -286,7 +334,8 @@ class SecurityMonitor:
                         ):
                             seen_remotes.add(remote)
                             self.alerts.fire(
-                                "WARNING", "network",
+                                "WARNING",
+                                "network",
                                 f"New outbound connection to {remote}",
                             )
 
@@ -312,7 +361,8 @@ class SecurityMonitor:
                     if re.search(pattern, line):
                         short_line = line[:200] + "..." if len(line) > 200 else line
                         self.alerts.fire(
-                            severity, "logs",
+                            severity,
+                            "logs",
                             f"{description}: {short_line}",
                         )
                         break
@@ -338,9 +388,11 @@ class SecurityMonitor:
                 if health == "unhealthy":
                     self._consecutive_unhealthy += 1
                     if self._consecutive_unhealthy >= 2:
+                        count = self._consecutive_unhealthy
                         self.alerts.fire(
-                            "CRITICAL", "health",
-                            f"Container unhealthy ({self._consecutive_unhealthy} consecutive checks)",
+                            "CRITICAL",
+                            "health",
+                            f"Container unhealthy ({count} consecutive checks)",
                         )
                         self._auto_pause("Container unhealthy")
                 else:
@@ -368,12 +420,14 @@ class SecurityMonitor:
 
                 if action in CRITICAL_EVENTS:
                     self.alerts.fire(
-                        "CRITICAL", "events",
+                        "CRITICAL",
+                        "events",
                         f"Container event: {action}",
                     )
                 elif action in WARNING_EVENTS:
                     self.alerts.fire(
-                        "WARNING", "events",
+                        "WARNING",
+                        "events",
                         f"Container event: {action}",
                     )
                 elif action == "start":

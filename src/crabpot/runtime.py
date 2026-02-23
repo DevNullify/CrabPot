@@ -4,8 +4,15 @@ Provides a common interface for both Docker and WSL2 deployment targets,
 allowing command handlers to be target-agnostic.
 """
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
-from typing import Iterator, Optional
+from collections.abc import Iterator
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from crabpot.docker_manager import DockerManager
+    from crabpot.wsl2_manager import WSL2Manager
 
 
 class Runtime(ABC):
@@ -40,7 +47,7 @@ class Runtime(ABC):
         """Get current status: running, paused, exited, not_found."""
 
     @abstractmethod
-    def stats_snapshot(self) -> Optional[dict]:
+    def stats_snapshot(self) -> dict | None:
         """Get a snapshot of resource usage stats."""
 
     @abstractmethod
@@ -60,11 +67,11 @@ class Runtime(ABC):
         """Stream lifecycle events."""
 
     @abstractmethod
-    def get_health(self) -> Optional[str]:
+    def get_health(self) -> str | None:
         """Get health status."""
 
     @abstractmethod
-    def get_start_time(self) -> Optional[str]:
+    def get_start_time(self) -> str | None:
         """Get the start time as an ISO string."""
 
     @abstractmethod
@@ -83,7 +90,7 @@ class Runtime(ABC):
 class DockerRuntime(Runtime):
     """Wraps DockerManager to satisfy the Runtime interface."""
 
-    def __init__(self, docker_manager):
+    def __init__(self, docker_manager: DockerManager):
         self.dm = docker_manager
 
     def setup(self) -> None:
@@ -107,7 +114,7 @@ class DockerRuntime(Runtime):
     def get_status(self) -> str:
         return self.dm.get_status()
 
-    def stats_snapshot(self) -> Optional[dict]:
+    def stats_snapshot(self) -> dict | None:
         return self.dm.stats_snapshot()
 
     def get_top(self) -> list:
@@ -122,14 +129,15 @@ class DockerRuntime(Runtime):
     def events_stream(self) -> Iterator[dict]:
         return self.dm.events_stream()
 
-    def get_health(self) -> Optional[str]:
+    def get_health(self) -> str | None:
         return self.dm.get_health()
 
-    def get_start_time(self) -> Optional[str]:
+    def get_start_time(self) -> str | None:
         return self.dm.get_start_time()
 
     def open_shell(self) -> None:
         import subprocess
+
         subprocess.run(["docker", "exec", "-it", "crabpot", "/bin/sh"], check=False)
 
     def build(self) -> None:
@@ -146,80 +154,68 @@ class WSL2Runtime(Runtime):
     is provided, operations raise NotImplementedError.
     """
 
-    def __init__(self, wsl2_manager=None):
+    def __init__(self, wsl2_manager: WSL2Manager | None = None):
         self.wm = wsl2_manager
 
-    def _require_manager(self):
+    def _require_manager(self) -> WSL2Manager:
         if self.wm is None:
             raise NotImplementedError("WSL2 runtime requires a WSL2Manager instance")
+        return self.wm
 
     def setup(self) -> None:
-        self._require_manager()
-        self.wm.create_distro()
+        self._require_manager().create_distro()
 
     def start(self) -> None:
-        self._require_manager()
-        self.wm.start()
+        self._require_manager().start()
 
     def stop(self) -> None:
-        self._require_manager()
-        self.wm.stop()
+        self._require_manager().stop()
 
     def pause(self) -> None:
-        self._require_manager()
-        self.wm.stop()  # WSL2 doesn't have pause — terminate instead
+        self._require_manager().stop()  # WSL2 doesn't have pause — terminate instead
 
     def resume(self) -> None:
-        self._require_manager()
-        self.wm.start()
+        self._require_manager().start()
 
     def destroy(self) -> None:
-        self._require_manager()
-        self.wm.destroy()
+        self._require_manager().destroy()
 
     def get_status(self) -> str:
-        self._require_manager()
-        return self.wm.get_status()
+        return self._require_manager().get_status()
 
-    def stats_snapshot(self) -> Optional[dict]:
-        self._require_manager()
-        return self.wm.get_stats()
+    def stats_snapshot(self) -> dict | None:
+        return self._require_manager().get_stats()
 
     def get_top(self) -> list:
-        self._require_manager()
-        output = self.wm.exec_run("ps aux")
+        wm = self._require_manager()
+        output = wm.exec_run("ps aux")
         lines = output.strip().splitlines()
         if len(lines) <= 1:
             return []
         return [{"CMD": line.split(None, 10)[-1]} for line in lines[1:]]
 
     def exec_run(self, cmd: str) -> str:
-        self._require_manager()
-        return self.wm.exec_run(cmd)
+        return self._require_manager().exec_run(cmd)
 
     def get_logs(self, follow: bool = False, tail: int = 100) -> Iterator[str]:
-        self._require_manager()
-        return self.wm.get_logs(follow=follow, tail=tail)
+        return self._require_manager().get_logs(follow=follow, tail=tail)
 
     def events_stream(self) -> Iterator[dict]:
         # WSL2 doesn't have a native event stream
         return iter([])
 
-    def get_health(self) -> Optional[str]:
-        self._require_manager()
-        status = self.wm.get_status()
+    def get_health(self) -> str | None:
+        status = self._require_manager().get_status()
         return "healthy" if status == "running" else "unhealthy"
 
-    def get_start_time(self) -> Optional[str]:
+    def get_start_time(self) -> str | None:
         return None  # WSL2 doesn't expose start time easily
 
     def open_shell(self) -> None:
-        self._require_manager()
-        self.wm.open_shell()
+        self._require_manager().open_shell()
 
     def build(self) -> None:
         self.setup()
 
     def is_running(self) -> bool:
-        self._require_manager()
-        return self.wm.get_status() == "running"
+        return self._require_manager().get_status() == "running"

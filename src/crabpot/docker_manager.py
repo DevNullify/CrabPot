@@ -1,8 +1,10 @@
 """Docker SDK wrapper for managing the CrabPot container lifecycle."""
 
+import contextlib
 import subprocess
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator, Optional
+from typing import Optional
 
 import docker
 from docker.errors import APIError, NotFound
@@ -91,14 +93,10 @@ class DockerManager:
         else:
             container = self._get_container()
             if container:
-                try:
+                with contextlib.suppress(APIError):
                     container.stop(timeout=10)
-                except APIError:
-                    pass
-                try:
+                with contextlib.suppress(APIError):
                     container.remove(v=True, force=True)
-                except APIError:
-                    pass
 
     def is_running(self) -> bool:
         """Check if the container is currently running."""
@@ -109,7 +107,7 @@ class DockerManager:
         container = self._get_container()
         if container is None:
             return "not_found"
-        return container.status
+        return str(container.status)
 
     def stats_stream(self) -> Iterator[dict]:
         """Yield parsed stats dicts from the Docker stats API (streaming)."""
@@ -172,7 +170,8 @@ class DockerManager:
             return None
         container.reload()
         state = container.attrs.get("State", {})
-        return state.get("StartedAt")
+        started: Optional[str] = state.get("StartedAt")
+        return started
 
     def get_health(self) -> Optional[str]:
         """Get the container's health status."""
@@ -182,15 +181,15 @@ class DockerManager:
         container.reload()
         state = container.attrs.get("State", {})
         health = state.get("Health", {})
-        return health.get("Status", "none")
+        result: Optional[str] = health.get("Status", "none")
+        return result
 
     def events_stream(self) -> Iterator[dict]:
         """Stream Docker events filtered to the crabpot container."""
-        for event in self.client.events(
+        yield from self.client.events(
             decode=True,
             filters={"container": self.container_name},
-        ):
-            yield event
+        )
 
     def _get_container(self):
         """Get the container object, or None if not found."""
@@ -202,10 +201,12 @@ class DockerManager:
     @staticmethod
     def _parse_stats(raw: dict) -> dict:
         """Parse raw Docker stats into a clean dict."""
-        cpu_delta = raw.get("cpu_stats", {}).get("cpu_usage", {}).get("total_usage", 0) - \
-            raw.get("precpu_stats", {}).get("cpu_usage", {}).get("total_usage", 0)
-        system_delta = raw.get("cpu_stats", {}).get("system_cpu_usage", 0) - \
-            raw.get("precpu_stats", {}).get("system_cpu_usage", 0)
+        cpu_delta = raw.get("cpu_stats", {}).get("cpu_usage", {}).get("total_usage", 0) - raw.get(
+            "precpu_stats", {}
+        ).get("cpu_usage", {}).get("total_usage", 0)
+        system_delta = raw.get("cpu_stats", {}).get("system_cpu_usage", 0) - raw.get(
+            "precpu_stats", {}
+        ).get("system_cpu_usage", 0)
         num_cpus = raw.get("cpu_stats", {}).get("online_cpus", 1)
 
         cpu_percent = 0.0

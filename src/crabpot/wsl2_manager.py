@@ -6,8 +6,9 @@ Provides import, start, stop, destroy, and exec operations via wsl.exe.
 
 import logging
 import subprocess
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator, Optional
+from typing import Optional
 
 from jinja2 import BaseLoader, Environment
 
@@ -82,6 +83,7 @@ class WSL2Manager:
         # Clean up local files
         if self.wsl2_dir.exists():
             import shutil
+
             shutil.rmtree(self.wsl2_dir, ignore_errors=True)
         logger.info("WSL2 distribution '%s' destroyed", self.distro_name)
 
@@ -234,9 +236,13 @@ class WSL2Manager:
 
         subprocess.run(
             [
-                "wsl", "--import", self.distro_name,
-                str(install_dir), str(rootfs_path),
-                "--version", "2",
+                "wsl",
+                "--import",
+                self.distro_name,
+                str(install_dir),
+                str(rootfs_path),
+                "--version",
+                "2",
             ],
             check=True,
             capture_output=True,
@@ -257,6 +263,7 @@ class WSL2Manager:
         template = self.jinja_env.from_string(setup_template)
 
         from dataclasses import asdict
+
         context = asdict(profile)
         if resource_profile:
             context.update(asdict(resource_profile))

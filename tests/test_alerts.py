@@ -2,7 +2,6 @@
 
 import json
 import threading
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -90,10 +89,7 @@ class TestAlertDispatcher:
 
         mock_sio.emit.assert_called()
         # Find the alert emit (not stats)
-        alert_calls = [
-            c for c in mock_sio.emit.call_args_list
-            if c[0][0] == "alert"
-        ]
+        alert_calls = [c for c in mock_sio.emit.call_args_list if c[0][0] == "alert"]
         assert len(alert_calls) == 1
 
     def test_push_stats(self, dispatcher):
@@ -110,8 +106,18 @@ class TestAlertDispatcher:
         log_file = data_dir / "alerts.log"
 
         entries = [
-            {"severity": "INFO", "source": "test", "message": "Old alert 1", "timestamp": "12:00:00"},
-            {"severity": "WARNING", "source": "test", "message": "Old alert 2", "timestamp": "12:01:00"},
+            {
+                "severity": "INFO",
+                "source": "test",
+                "message": "Old alert 1",
+                "timestamp": "12:00:00",
+            },
+            {
+                "severity": "WARNING",
+                "source": "test",
+                "message": "Old alert 2",
+                "timestamp": "12:01:00",
+            },
         ]
         with open(log_file, "w") as f:
             for entry in entries:

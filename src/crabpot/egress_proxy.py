@@ -32,7 +32,7 @@ class _ProxyHandler(http.server.BaseHTTPRequestHandler):
     """
 
     policy: EgressPolicy
-    gate: ActionGate
+    gate: Optional[ActionGate]
 
     # Suppress per-request log lines from BaseHTTPRequestHandler
     def log_message(self, format, *args):
@@ -97,6 +97,7 @@ class _ProxyHandler(http.server.BaseHTTPRequestHandler):
 
         try:
             from urllib.parse import urlparse
+
             parsed = urlparse(url)
             host = parsed.hostname or ""
             port = parsed.port or 80

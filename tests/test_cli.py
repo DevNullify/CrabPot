@@ -37,9 +37,11 @@ class TestCmdInit:
             openclaw_tag="latest",
             non_interactive=True,
         )
-        with patch("crabpot.cli.CONFIG_FILE", tmp_path / "crabpot.yml"), \
-             patch("crabpot.cli.CONFIG_DIR", tmp_path / "config"), \
-             patch("crabpot.cli.DATA_DIR", tmp_path / "data"):
+        with (
+            patch("crabpot.cli.CONFIG_FILE", tmp_path / "crabpot.yml"),
+            patch("crabpot.cli.CONFIG_DIR", tmp_path / "config"),
+            patch("crabpot.cli.DATA_DIR", tmp_path / "data"),
+        ):
             dispatch(args)
         mock_save.assert_called_once()
 

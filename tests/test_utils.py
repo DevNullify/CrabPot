@@ -18,6 +18,7 @@ class TestFormatUptime:
 
     def test_recent_date_returns_seconds(self):
         from datetime import datetime, timezone
+
         now = datetime.now(timezone.utc).isoformat()
         result = format_uptime(now)
         # Should be a few seconds

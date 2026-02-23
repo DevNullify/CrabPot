@@ -6,7 +6,7 @@ that merges a preset with user-supplied overrides.
 """
 
 from dataclasses import asdict, dataclass, fields
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Optional
 
 
 @dataclass
@@ -39,7 +39,7 @@ class ResourceProfile:
 
 # ── Named presets ──────────────────────────────────────────────────────
 
-PRESETS: Dict[str, Tuple[SecurityProfile, ResourceProfile]] = {
+PRESETS: dict[str, tuple[SecurityProfile, ResourceProfile]] = {
     "minimal": (
         SecurityProfile(
             read_only_rootfs=False,
@@ -101,9 +101,9 @@ VALID_PRESET_NAMES = tuple(PRESETS.keys())
 
 def resolve_profile(
     preset_name: str = "standard",
-    overrides: Optional[Dict[str, Any]] = None,
-    resource_overrides: Optional[Dict[str, Any]] = None,
-) -> Tuple[SecurityProfile, ResourceProfile]:
+    overrides: Optional[dict[str, Any]] = None,
+    resource_overrides: Optional[dict[str, Any]] = None,
+) -> tuple[SecurityProfile, ResourceProfile]:
     """Merge a named preset with user-supplied overrides.
 
     Args:

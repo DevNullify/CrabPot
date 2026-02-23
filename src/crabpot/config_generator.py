@@ -85,14 +85,16 @@ class ConfigGenerator:
 
         # Build template context from profile flags + resource values
         context = asdict(self.security_profile)
-        context.update({
-            "openclaw_tag": self.openclaw_tag,
-            "seccomp_path": seccomp_path,
-            "cpu_limit": self.resource_profile.cpu_limit,
-            "memory_limit": self.resource_profile.memory_limit,
-            "pids_limit": self.resource_profile.pids_limit,
-            "egress_proxy_port": self.egress_proxy_port,
-        })
+        context.update(
+            {
+                "openclaw_tag": self.openclaw_tag,
+                "seccomp_path": seccomp_path,
+                "cpu_limit": self.resource_profile.cpu_limit,
+                "memory_limit": self.resource_profile.memory_limit,
+                "pids_limit": self.resource_profile.pids_limit,
+                "egress_proxy_port": self.egress_proxy_port,
+            }
+        )
 
         rendered = template.render(**context)
         (self.config_dir / "docker-compose.yml").write_text(rendered)

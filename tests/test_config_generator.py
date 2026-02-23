@@ -1,12 +1,11 @@
 """Tests for config_generator.py."""
 
 import json
-from pathlib import Path
 
 import pytest
 
 from crabpot.config_generator import ConfigGenerator
-from crabpot.security_presets import ResourceProfile, SecurityProfile, resolve_profile
+from crabpot.security_presets import ResourceProfile, resolve_profile
 
 
 @pytest.fixture
@@ -108,9 +107,7 @@ class TestConfigGenerator:
 class TestMinimalPreset:
     def test_minimal_compose_no_security(self, config_dir):
         sec, res = resolve_profile("minimal")
-        gen = ConfigGenerator(
-            config_dir=config_dir, security_profile=sec, resource_profile=res
-        )
+        gen = ConfigGenerator(config_dir=config_dir, security_profile=sec, resource_profile=res)
         gen.generate_all()
 
         compose = (config_dir / "docker-compose.yml").read_text()
@@ -127,18 +124,14 @@ class TestMinimalPreset:
 
     def test_minimal_no_seccomp_file(self, config_dir):
         sec, res = resolve_profile("minimal")
-        gen = ConfigGenerator(
-            config_dir=config_dir, security_profile=sec, resource_profile=res
-        )
+        gen = ConfigGenerator(config_dir=config_dir, security_profile=sec, resource_profile=res)
         gen.generate_all()
 
         assert not (config_dir / "seccomp-profile.json").exists()
 
     def test_minimal_no_dockerfile(self, config_dir):
         sec, res = resolve_profile("minimal")
-        gen = ConfigGenerator(
-            config_dir=config_dir, security_profile=sec, resource_profile=res
-        )
+        gen = ConfigGenerator(config_dir=config_dir, security_profile=sec, resource_profile=res)
         gen.generate_all()
 
         assert not (config_dir / "Dockerfile.crabpot").exists()
@@ -147,9 +140,7 @@ class TestMinimalPreset:
 class TestParanoidPreset:
     def test_paranoid_generates_hardened_dockerfile(self, config_dir):
         sec, res = resolve_profile("paranoid")
-        gen = ConfigGenerator(
-            config_dir=config_dir, security_profile=sec, resource_profile=res
-        )
+        gen = ConfigGenerator(config_dir=config_dir, security_profile=sec, resource_profile=res)
         gen.generate_all()
 
         assert (config_dir / "Dockerfile.crabpot").exists()
@@ -161,9 +152,7 @@ class TestParanoidPreset:
 
     def test_paranoid_compose_uses_build(self, config_dir):
         sec, res = resolve_profile("paranoid")
-        gen = ConfigGenerator(
-            config_dir=config_dir, security_profile=sec, resource_profile=res
-        )
+        gen = ConfigGenerator(config_dir=config_dir, security_profile=sec, resource_profile=res)
         gen.generate_all()
 
         compose = (config_dir / "docker-compose.yml").read_text()
@@ -173,9 +162,7 @@ class TestParanoidPreset:
 
     def test_paranoid_compose_all_security(self, config_dir):
         sec, res = resolve_profile("paranoid")
-        gen = ConfigGenerator(
-            config_dir=config_dir, security_profile=sec, resource_profile=res
-        )
+        gen = ConfigGenerator(config_dir=config_dir, security_profile=sec, resource_profile=res)
         gen.generate_all()
 
         compose = (config_dir / "docker-compose.yml").read_text()
@@ -189,15 +176,13 @@ class TestParanoidPreset:
 
     def test_paranoid_resource_limits(self, config_dir):
         sec, res = resolve_profile("paranoid")
-        gen = ConfigGenerator(
-            config_dir=config_dir, security_profile=sec, resource_profile=res
-        )
+        gen = ConfigGenerator(config_dir=config_dir, security_profile=sec, resource_profile=res)
         gen.generate_all()
 
         compose = (config_dir / "docker-compose.yml").read_text()
-        assert '"1"' in compose   # cpu
-        assert "1g" in compose    # memory
-        assert "100" in compose   # pids
+        assert '"1"' in compose  # cpu
+        assert "1g" in compose  # memory
+        assert "100" in compose  # pids
 
 
 class TestCustomOpenClawTag:

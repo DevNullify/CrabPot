@@ -1,11 +1,11 @@
 """Multi-channel alert dispatcher: toast + terminal + log + WebSocket."""
 
 import base64
+import contextlib
 import json
 import re
 import subprocess
 import threading
-import time
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -20,7 +20,7 @@ class AlertDispatcher:
         self.log_file = self.data_dir / "alerts.log"
         self.socketio = socketio
         self._lock = threading.Lock()
-        self._history = []
+        self._history: list[dict] = []
         self._load_history()
 
     def set_socketio(self, sio):
@@ -53,10 +53,8 @@ class AlertDispatcher:
     def push_stats(self, stats: dict) -> None:
         """Push stats to the WebSocket dashboard."""
         if self.socketio:
-            try:
+            with contextlib.suppress(Exception):
                 self.socketio.emit("stats", stats, namespace="/")
-            except Exception:
-                pass
 
     def get_history(self, last: int = 20, severity: Optional[str] = None) -> list:
         """Get recent alert history, optionally filtered by severity."""
@@ -104,10 +102,8 @@ class AlertDispatcher:
     def _send_websocket(self, alert: dict) -> None:
         """Push the alert to the WebSocket dashboard."""
         if self.socketio:
-            try:
+            with contextlib.suppress(Exception):
                 self.socketio.emit("alert", alert, namespace="/")
-            except Exception:
-                pass
 
     def _send_toast(self, title: str, message: str) -> None:
         """Send a Windows toast notification via powershell.exe from WSL2.
@@ -145,14 +141,12 @@ class AlertDispatcher:
         if not self.log_file.exists():
             return
         try:
-            with open(self.log_file, "r") as f:
+            with open(self.log_file) as f:
                 for line in f:
                     line = line.strip()
                     if line:
-                        try:
+                        with contextlib.suppress(json.JSONDecodeError):
                             self._history.append(json.loads(line))
-                        except json.JSONDecodeError:
-                            pass
             # Keep bounded
             if len(self._history) > 1000:
                 self._history = self._history[-500:]

@@ -27,13 +27,14 @@ def main():
 
     # ── Init ──────────────────────────────────────────────
     init_p = subparsers.add_parser("init", help="Interactive setup wizard (checks prerequisites)")
-    init_p.add_argument("--target", choices=["docker", "wsl2"],
-                        help="Deployment target")
-    init_p.add_argument("--preset", choices=["minimal", "standard", "paranoid"],
-                        help="Security preset")
+    init_p.add_argument("--target", choices=["docker", "wsl2"], help="Deployment target")
+    init_p.add_argument(
+        "--preset", choices=["minimal", "standard", "paranoid"], help="Security preset"
+    )
     init_p.add_argument("--openclaw-tag", help="OpenClaw image tag (e.g. latest, v1.2.3)")
-    init_p.add_argument("--non-interactive", action="store_true",
-                        help="Skip prompts, use defaults or CLI flags")
+    init_p.add_argument(
+        "--non-interactive", action="store_true", help="Skip prompts, use defaults or CLI flags"
+    )
 
     subparsers.add_parser("setup", help="Generate configs + build image based on crabpot.yml")
     subparsers.add_parser("start", help="Launch container + dashboard + security monitor")
@@ -45,9 +46,13 @@ def main():
 
     # ── Config ────────────────────────────────────────────
     config_p = subparsers.add_parser("config", help="Show or edit configuration")
-    config_p.add_argument("action", nargs="?", default="show",
-                          choices=["show", "edit", "reset"],
-                          help="Action to perform (default: show)")
+    config_p.add_argument(
+        "action",
+        nargs="?",
+        default="show",
+        choices=["show", "edit", "reset"],
+        help="Action to perform (default: show)",
+    )
 
     logs_p = subparsers.add_parser("logs", help="Stream container logs")
     logs_p.add_argument("-f", "--follow", action="store_true", help="Follow log output")
@@ -67,15 +72,18 @@ def main():
 
     # ── Egress policy commands ─────────────────────────────
     policy_p = subparsers.add_parser("policy", help="Show/manage egress allowlist")
-    policy_p.add_argument("action", nargs="?", default="show",
-                          choices=["show", "add", "remove"],
-                          help="Action to perform (default: show)")
+    policy_p.add_argument(
+        "action",
+        nargs="?",
+        default="show",
+        choices=["show", "add", "remove"],
+        help="Action to perform (default: show)",
+    )
     policy_p.add_argument("domain", nargs="?", help="Domain to add/remove")
 
     approve_p = subparsers.add_parser("approve", help="Approve a pending egress domain")
     approve_p.add_argument("domain", help="Domain to approve")
-    approve_p.add_argument("--permanent", action="store_true",
-                           help="Add to permanent allowlist")
+    approve_p.add_argument("--permanent", action="store_true", help="Add to permanent allowlist")
 
     deny_p = subparsers.add_parser("deny", help="Deny a pending egress domain")
     deny_p.add_argument("domain", help="Domain to deny")

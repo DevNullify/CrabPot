@@ -35,13 +35,13 @@ class Decision(str, Enum):
 # ── Secret patterns (compiled for performance) ───────────────────────────────
 
 SECRET_PATTERNS = [
-    re.compile(r"sk-[A-Za-z0-9]{20,}"),                        # OpenAI
-    re.compile(r"sk-ant-[A-Za-z0-9_-]{20,}"),                  # Anthropic
-    re.compile(r"(?:AKIA|ABIA|ACCA|ASIA)[A-Z0-9]{16}"),        # AWS access key
-    re.compile(r"(?i)bearer\s+[A-Za-z0-9._~+/=-]{30,}"),       # Bearer tokens
-    re.compile(r"ghp_[A-Za-z0-9]{36}"),                         # GitHub PAT
-    re.compile(r"glpat-[A-Za-z0-9_-]{20,}"),                    # GitLab PAT
-    re.compile(r"xox[bpsa]-[A-Za-z0-9-]{10,}"),                # Slack tokens
+    re.compile(r"sk-[A-Za-z0-9]{20,}"),  # OpenAI
+    re.compile(r"sk-ant-[A-Za-z0-9_-]{20,}"),  # Anthropic
+    re.compile(r"(?:AKIA|ABIA|ACCA|ASIA)[A-Z0-9]{16}"),  # AWS access key
+    re.compile(r"(?i)bearer\s+[A-Za-z0-9._~+/=-]{30,}"),  # Bearer tokens
+    re.compile(r"ghp_[A-Za-z0-9]{36}"),  # GitHub PAT
+    re.compile(r"glpat-[A-Za-z0-9_-]{20,}"),  # GitLab PAT
+    re.compile(r"xox[bpsa]-[A-Za-z0-9-]{10,}"),  # Slack tokens
     re.compile(
         r"(?i)(?:api[_-]?key|api[_-]?secret|access[_-]?token|private[_-]?key)"
         r"\s*[:=]\s*['\"]?[A-Za-z0-9+/=_-]{20,}['\"]?"
@@ -92,11 +92,11 @@ def _shannon_entropy(s: str) -> float:
     """Calculate Shannon entropy of a string in bits per character."""
     if not s:
         return 0.0
-    freq = {}
+    freq: dict[str, int] = {}
     for ch in s:
         freq[ch] = freq.get(ch, 0) + 1
     length = len(s)
-    return -sum((c / length) * math.log2(c / length) for c in freq.values())
+    return float(-sum((c / length) * math.log2(c / length) for c in freq.values()))
 
 
 def _try_decode_base64(s: str) -> str:

@@ -1,6 +1,5 @@
 """Tests for config.py."""
 
-import pytest
 import yaml
 
 from crabpot.config import (
@@ -10,7 +9,6 @@ from crabpot.config import (
     OpenClawConfig,
     ResourceConfig,
     SecurityConfig,
-    WSL2Config,
     default_config_yaml,
     load_config,
     save_config,
@@ -72,16 +70,12 @@ class TestValidateConfig:
         assert any("preset" in e for e in errors)
 
     def test_invalid_security_override_key(self):
-        config = CrabPotConfig(
-            security=SecurityConfig(overrides={"bogus_key": True})
-        )
+        config = CrabPotConfig(security=SecurityConfig(overrides={"bogus_key": True}))
         errors = validate_config(config)
         assert any("bogus_key" in e for e in errors)
 
     def test_valid_security_override_key(self):
-        config = CrabPotConfig(
-            security=SecurityConfig(overrides={"read_only_rootfs": True})
-        )
+        config = CrabPotConfig(security=SecurityConfig(overrides={"read_only_rootfs": True}))
         errors = validate_config(config)
         assert errors == []
 
@@ -183,13 +177,22 @@ class TestDefaultConfigYaml:
 
     def test_contains_all_sections(self):
         text = default_config_yaml()
-        for section in ["target", "openclaw", "security", "resources", "egress", "dashboard", "wsl2"]:
+        for section in [
+            "target",
+            "openclaw",
+            "security",
+            "resources",
+            "egress",
+            "dashboard",
+            "wsl2",
+        ]:
             assert section in text
 
     def test_loadable_as_config(self):
         text = default_config_yaml()
         data = yaml.safe_load(text)
         from crabpot.config import _dict_to_config
+
         config = _dict_to_config(data)
         assert config.target == "docker"
         assert config.security.preset == "standard"

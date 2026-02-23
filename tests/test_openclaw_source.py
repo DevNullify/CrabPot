@@ -1,6 +1,5 @@
 """Tests for openclaw_source.py."""
 
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -103,10 +102,7 @@ class TestBuildMode:
         source.resolve_for_docker()
 
         # Find the checkout call by inspecting the first positional arg (the cmd list)
-        checkout_calls = [
-            c for c in mock_run.call_args_list
-            if c[0][0][1] == "checkout"
-        ]
+        checkout_calls = [c for c in mock_run.call_args_list if c[0][0][1] == "checkout"]
         assert len(checkout_calls) >= 1
         assert "v2.0.0-rc1" in checkout_calls[0][0][0]
 
@@ -118,10 +114,7 @@ class TestBuildMode:
         source = OpenClawSource(config, build_base=build_dir)
         source.resolve_for_docker()
 
-        clone_calls = [
-            c for c in mock_run.call_args_list
-            if "clone" in str(c)
-        ]
+        clone_calls = [c for c in mock_run.call_args_list if "clone" in str(c)]
         assert len(clone_calls) >= 1
         assert custom_url in str(clone_calls[0])
 
@@ -139,6 +132,7 @@ class TestBuildMode:
     @patch("crabpot.openclaw_source.subprocess.run")
     def test_clone_failure_raises(self, mock_run, build_dir):
         import subprocess as sp
+
         mock_run.side_effect = sp.CalledProcessError(1, "git clone")
         config = OpenClawConfig(source="build")
         source = OpenClawSource(config, build_base=build_dir)

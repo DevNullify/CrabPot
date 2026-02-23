@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from crabpot.action_gate import ActionGate
-from crabpot.egress_policy import Decision, EgressPolicy
+from crabpot.egress_policy import EgressPolicy
 from crabpot.egress_proxy import EgressProxy
 
 
@@ -74,7 +74,9 @@ class TestPolicyEnforcement:
         time.sleep(0.2)
         try:
             sock = socket.create_connection(("127.0.0.1", 19880), timeout=2)
-            sock.sendall(b"CONNECT blocked.example.com:443 HTTP/1.1\r\nHost: blocked.example.com\r\n\r\n")
+            sock.sendall(
+                b"CONNECT blocked.example.com:443 HTTP/1.1\r\nHost: blocked.example.com\r\n\r\n"
+            )
             response = sock.recv(4096).decode()
             assert "403" in response
             sock.close()

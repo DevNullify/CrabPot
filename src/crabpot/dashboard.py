@@ -1,16 +1,15 @@
 """Flask + SocketIO web dashboard for CrabPot."""
 
+import contextlib
 import logging
 import secrets
 import threading
-import time
 
 from flask import Flask, jsonify
 from flask_socketio import SocketIO
 
 from crabpot.dashboard_html import DASHBOARD_HTML
 from crabpot.utils import format_uptime
-
 
 # Suppress Flask/Werkzeug request logging
 logging.getLogger("werkzeug").setLevel(logging.ERROR)
@@ -20,9 +19,16 @@ class DashboardServer:
     """Web dashboard serving at http://localhost:9876 with real-time WebSocket updates."""
 
     def __init__(
-        self, docker_manager=None, alert_dispatcher=None, security_monitor=None,
-        action_gate=None, egress_policy=None, port=9876, runtime=None,
-        target="docker", security_preset="standard",
+        self,
+        docker_manager=None,
+        alert_dispatcher=None,
+        security_monitor=None,
+        action_gate=None,
+        egress_policy=None,
+        port=9876,
+        runtime=None,
+        target="docker",
+        security_preset="standard",
     ):
         # Accept either runtime or docker_manager for backward compatibility
         self.dm = runtime or docker_manager
@@ -127,11 +133,14 @@ class DashboardServer:
         @self.socketio.on("connect")
         def handle_connect():
             # Send initial state on connect
-            self.socketio.emit("status", {
-                "status": self.dm.get_status(),
-                "health": self.dm.get_health(),
-                "uptime": self._get_uptime(),
-            })
+            self.socketio.emit(
+                "status",
+                {
+                    "status": self.dm.get_status(),
+                    "health": self.dm.get_health(),
+                    "uptime": self._get_uptime(),
+                },
+            )
 
             # Send recent alerts
             for alert in self.alerts.get_history(last=20):
@@ -158,15 +167,21 @@ class DashboardServer:
                     self.monitor.stop()
                     self.dm.destroy()
 
-                self.socketio.emit("status", {
-                    "status": self.dm.get_status(),
-                    "health": self.dm.get_health(),
-                    "uptime": self._get_uptime(),
-                })
+                self.socketio.emit(
+                    "status",
+                    {
+                        "status": self.dm.get_status(),
+                        "health": self.dm.get_health(),
+                        "uptime": self._get_uptime(),
+                    },
+                )
             except Exception as e:
-                self.socketio.emit("error", {
-                    "message": f"Command '{action}' failed: {e}",
-                })
+                self.socketio.emit(
+                    "error",
+                    {
+                        "message": f"Command '{action}' failed: {e}",
+                    },
+                )
 
         @self.socketio.on("egress_approve")
         def handle_egress_approve(data):
@@ -175,11 +190,14 @@ class DashboardServer:
             if not domain or not self.gate:
                 return
             self.gate.approve(domain, permanent=permanent)
-            self.socketio.emit("egress_update", {
-                "domain": domain,
-                "action": "approved",
-                "permanent": permanent,
-            })
+            self.socketio.emit(
+                "egress_update",
+                {
+                    "domain": domain,
+                    "action": "approved",
+                    "permanent": permanent,
+                },
+            )
 
         @self.socketio.on("egress_deny")
         def handle_egress_deny(data):
@@ -187,23 +205,28 @@ class DashboardServer:
             if not domain or not self.gate:
                 return
             self.gate.deny(domain)
-            self.socketio.emit("egress_update", {
-                "domain": domain,
-                "action": "denied",
-            })
+            self.socketio.emit(
+                "egress_update",
+                {
+                    "domain": domain,
+                    "action": "denied",
+                },
+            )
 
     def _start_status_pusher(self) -> None:
         """Background thread that pushes container status every 5 seconds."""
+
         def pusher():
             while not self._stop_event.is_set():
-                try:
-                    self.socketio.emit("status", {
-                        "status": self.dm.get_status(),
-                        "health": self.dm.get_health(),
-                        "uptime": self._get_uptime(),
-                    })
-                except Exception:
-                    pass
+                with contextlib.suppress(Exception):
+                    self.socketio.emit(
+                        "status",
+                        {
+                            "status": self.dm.get_status(),
+                            "health": self.dm.get_health(),
+                            "uptime": self._get_uptime(),
+                        },
+                    )
                 self._stop_event.wait(timeout=5)
 
         t = threading.Thread(target=pusher, name="dashboard-status", daemon=True)
@@ -211,16 +234,15 @@ class DashboardServer:
 
     def _start_log_streamer(self) -> None:
         """Background thread that streams container logs to WebSocket clients."""
+
         def streamer():
             while not self._stop_event.is_set():
-                try:
+                with contextlib.suppress(Exception):
                     if self.dm.get_status() == "running":
                         for line in self.dm.get_logs(follow=True, tail=0):
                             if self._stop_event.is_set():
                                 return
                             self.socketio.emit("log", {"line": line})
-                except Exception:
-                    pass
                 self._stop_event.wait(timeout=5)
 
         t = threading.Thread(target=streamer, name="dashboard-logs", daemon=True)

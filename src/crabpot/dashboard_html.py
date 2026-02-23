@@ -303,7 +303,8 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     <div class="stat-row">
       <span class="stat-label">Net</span>
       <div class="bar-container" style="background: transparent;">
-        <span id="net-val" style="font-size:12px; color: var(--text-secondary);">RX 0MB / TX 0MB</span>
+        <span id="net-val" style="font-size:12px; color: var(--text-secondary);">
+          RX 0MB / TX 0MB</span>
       </div>
     </div>
     <div class="stat-row">

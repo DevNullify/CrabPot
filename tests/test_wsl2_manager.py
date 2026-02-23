@@ -1,7 +1,6 @@
 """Tests for wsl2_manager.py."""
 
-from pathlib import Path
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -99,6 +98,7 @@ class TestWSL2ManagerStatus:
     @patch("crabpot.wsl2_manager.subprocess.run")
     def test_status_timeout(self, mock_run, manager):
         import subprocess
+
         mock_run.side_effect = subprocess.TimeoutExpired("wsl", 10)
         assert manager.get_status() == "not_found"
 

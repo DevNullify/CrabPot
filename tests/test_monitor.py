@@ -1,12 +1,11 @@
 """Tests for monitor.py."""
 
-import threading
 import time
 from unittest.mock import MagicMock
 
 import pytest
 
-from crabpot.monitor import SecurityMonitor, SUSPICIOUS_PROCESSES
+from crabpot.monitor import SUSPICIOUS_PROCESSES, SecurityMonitor
 from crabpot.security_presets import SecurityProfile, resolve_profile
 
 
@@ -28,8 +27,7 @@ def mock_dm():
     dm.get_top.return_value = [{"CMD": "node app.js"}]
     dm.get_health.return_value = "healthy"
     dm.exec_run.return_value = (
-        "State Recv-Q Send-Q Local Remote\n"
-        "LISTEN 0 0 127.0.0.1:18789 0.0.0.0:*"
+        "State Recv-Q Send-Q Local Remote\nLISTEN 0 0 127.0.0.1:18789 0.0.0.0:*"
     )
     dm.get_logs.return_value = iter([])
     dm.events_stream.return_value = iter([])
@@ -111,8 +109,9 @@ class TestSecurityMonitor:
             cpu_sustain_seconds=1,
         )
         mon.start()
-        assert _wait_for_alert(mock_alerts, "WARNING", "stats"), \
+        assert _wait_for_alert(mock_alerts, "WARNING", "stats"), (
             "CPU warning was not fired within timeout"
+        )
         mon.stop()
 
     def test_suspicious_process_triggers_critical(self, mock_dm, mock_alerts):
@@ -130,8 +129,9 @@ class TestSecurityMonitor:
             security_profile=profile,
         )
         mon.start()
-        assert _wait_for_alert(mock_alerts, "CRITICAL", "processes"), \
+        assert _wait_for_alert(mock_alerts, "CRITICAL", "processes"), (
             "Process CRITICAL alert was not fired within timeout"
+        )
         mon.stop()
 
     def test_unhealthy_triggers_critical(self, mock_dm, mock_alerts):
@@ -146,8 +146,9 @@ class TestSecurityMonitor:
         )
         mon._consecutive_unhealthy = 1
         mon.start()
-        assert _wait_for_alert(mock_alerts, "CRITICAL", "health"), \
+        assert _wait_for_alert(mock_alerts, "CRITICAL", "health"), (
             "Health CRITICAL alert was not fired within timeout"
+        )
         mon.stop()
 
     def test_auto_pause_on_critical(self, mock_dm, mock_alerts):
@@ -161,8 +162,9 @@ class TestSecurityMonitor:
             security_profile=profile,
         )
         mon.start()
-        assert _wait_for_alert(mock_alerts, "CRITICAL", "processes"), \
+        assert _wait_for_alert(mock_alerts, "CRITICAL", "processes"), (
             "Process CRITICAL alert was not fired within timeout"
+        )
         mon.stop()
 
         mock_dm.pause.assert_called()
@@ -199,14 +201,14 @@ class TestSecurityMonitor:
             security_profile=profile,
         )
         mon.start()
-        assert _wait_for_alert(mock_alerts, "WARNING", "stats"), \
-            "Memory warning was not fired"
+        assert _wait_for_alert(mock_alerts, "WARNING", "stats"), "Memory warning was not fired"
         time.sleep(3)
         mon.stop()
 
         # Should have fired only once (cooldown is 60s, we waited 3s)
         memory_alerts = [
-            c for c in mock_alerts.fire.call_args_list
+            c
+            for c in mock_alerts.fire.call_args_list
             if c[0][0] == "WARNING" and c[0][1] == "stats" and "Memory" in c[0][2]
         ]
         assert len(memory_alerts) == 1
@@ -214,8 +216,7 @@ class TestSecurityMonitor:
     def test_network_deduplicates_connections(self, mock_dm, mock_alerts):
         """Test that network watcher doesn't re-alert on the same connection."""
         mock_dm.exec_run.return_value = (
-            "State Recv-Q Send-Q Local Remote\n"
-            "ESTAB 0 0 172.17.0.2:18789 8.8.8.8:443"
+            "State Recv-Q Send-Q Local Remote\nESTAB 0 0 172.17.0.2:18789 8.8.8.8:443"
         )
 
         # Need network_auditor enabled
@@ -226,13 +227,13 @@ class TestSecurityMonitor:
             security_profile=profile,
         )
         mon.start()
-        assert _wait_for_alert(mock_alerts, "WARNING", "network"), \
-            "Network warning was not fired"
+        assert _wait_for_alert(mock_alerts, "WARNING", "network"), "Network warning was not fired"
         time.sleep(2)
         mon.stop()
 
         network_alerts = [
-            c for c in mock_alerts.fire.call_args_list
+            c
+            for c in mock_alerts.fire.call_args_list
             if c[0][0] == "WARNING" and c[0][1] == "network"
         ]
         assert len(network_alerts) == 1
@@ -320,7 +321,6 @@ class TestConditionalWatchers:
         mon.stop()
         # Should NOT have fired the "Security monitor started" alert
         info_alerts = [
-            c for c in mock_alerts.fire.call_args_list
-            if c[0][0] == "INFO" and "monitor" in c[0][1]
+            c for c in mock_alerts.fire.call_args_list if c[0][0] == "INFO" and "monitor" in c[0][1]
         ]
         assert len(info_alerts) == 0

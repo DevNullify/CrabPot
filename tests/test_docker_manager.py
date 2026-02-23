@@ -1,6 +1,6 @@
 """Tests for docker_manager.py."""
 
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -34,6 +34,7 @@ class TestDockerManager:
 
     def test_get_status_not_found(self, dm, mock_docker_client):
         from docker.errors import NotFound
+
         mock_docker_client.containers.get.side_effect = NotFound("not found")
 
         assert dm.get_status() == "not_found"
@@ -95,6 +96,7 @@ class TestDockerManager:
 
     def test_stop_not_found(self, dm, mock_docker_client):
         from docker.errors import NotFound
+
         mock_docker_client.containers.get.side_effect = NotFound("not found")
 
         # Should not raise

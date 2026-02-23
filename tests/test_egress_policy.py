@@ -1,7 +1,6 @@
 """Tests for egress_policy.py — domain allowlist, secret scanner, and deobfuscation."""
 
 import base64
-from pathlib import Path
 
 import pytest
 

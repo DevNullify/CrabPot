@@ -194,9 +194,7 @@ def _check_docker_prerequisites():
 def _check_wsl2_prerequisites():
     """Check WSL2 availability (basic check)."""
     try:
-        result = subprocess.run(
-            ["wsl", "--status"], capture_output=True, text=True, timeout=5
-        )
+        result = subprocess.run(["wsl", "--status"], capture_output=True, text=True, timeout=5)
         if result.returncode == 0:
             console.print("  [green]WSL2:[/green] available")
         else:
@@ -238,8 +236,7 @@ def cmd_setup(args):
         )
         save_config(config, config_path=CONFIG_FILE)
         console.print(
-            f"[green]Created {CONFIG_FILE} "
-            "(preset: paranoid, hardened_image: true)[/green]"
+            f"[green]Created {CONFIG_FILE} (preset: paranoid, hardened_image: true)[/green]"
         )
         console.print("[dim]This matches v1's always-on security behavior.[/dim]\n")
 
@@ -433,9 +430,7 @@ def cmd_start(args):
 
     # Start the security monitor (with conditional watchers)
     console.print("Starting security monitor...")
-    monitor = SecurityMonitor(
-        docker_manager=dm, alert_dispatcher=alerts, security_profile=profile
-    )
+    monitor = SecurityMonitor(docker_manager=dm, alert_dispatcher=alerts, security_profile=profile)
     monitor.start()
     active_count = len(monitor._threads)
     console.print(f"[green]Security monitor active ({active_count} channels).[/green]")
@@ -568,13 +563,13 @@ def cmd_status(args):
         stats = dm.stats_snapshot()
         if stats:
             console.print(f"  CPU:    {stats['cpu_percent']}%")
-            mem_mb = stats['memory_usage'] / (1024 * 1024)
-            mem_limit_mb = stats['memory_limit'] / (1024 * 1024)
-            mem_pct = stats['memory_percent']
+            mem_mb = stats["memory_usage"] / (1024 * 1024)
+            mem_limit_mb = stats["memory_limit"] / (1024 * 1024)
+            mem_pct = stats["memory_percent"]
             console.print(f"  Memory: {mem_mb:.0f}MB / {mem_limit_mb:.0f}MB ({mem_pct}%)")
             console.print(f"  PIDs:   {stats['pids']}")
-            rx_mb = stats['network_rx'] / (1024 * 1024)
-            tx_mb = stats['network_tx'] / (1024 * 1024)
+            rx_mb = stats["network_rx"] / (1024 * 1024)
+            tx_mb = stats["network_tx"] / (1024 * 1024)
             console.print(f"  Net:    RX {rx_mb:.1f}MB / TX {tx_mb:.1f}MB")
 
     # Recent alerts
@@ -690,6 +685,7 @@ def cmd_uninstall(args):
     # Stop container if running
     try:
         from crabpot.docker_manager import DockerManager
+
         dm = DockerManager(config_dir=CONFIG_DIR)
         dm.destroy()
     except Exception:
@@ -702,8 +698,7 @@ def cmd_uninstall(args):
 
     # Inform about PATH cleanup
     console.print(
-        "\n[yellow]Remove the following line from your shell config "
-        "(~/.bashrc, ~/.zshrc):[/yellow]"
+        "\n[yellow]Remove the following line from your shell config (~/.bashrc, ~/.zshrc):[/yellow]"
     )
     console.print('  export PATH="$HOME/.crabpot/bin:$PATH"')
     console.print("\n[green]CrabPot uninstalled.[/green]")

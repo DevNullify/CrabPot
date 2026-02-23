@@ -1,5 +1,6 @@
 """Rich terminal dashboard (TUI) for CrabPot."""
 
+import contextlib
 import sys
 import time
 from typing import Optional
@@ -32,9 +33,7 @@ class TUI:
             import termios
             import tty
         except ImportError:
-            self.console.print(
-                "[red]TUI requires a Unix-like terminal (Linux/macOS/WSL2).[/red]"
-            )
+            self.console.print("[red]TUI requires a Unix-like terminal (Linux/macOS/WSL2).[/red]")
             return
 
         old_settings = termios.tcgetattr(sys.stdin)
@@ -63,20 +62,14 @@ class TUI:
             if key == "q":
                 self._running = False
             elif key == "p":
-                try:
+                with contextlib.suppress(Exception):
                     self.dm.pause()
-                except Exception:
-                    pass
             elif key == "r":
-                try:
+                with contextlib.suppress(Exception):
                     self.dm.resume()
-                except Exception:
-                    pass
             elif key == "s":
-                try:
+                with contextlib.suppress(Exception):
                     self.dm.stop()
-                except Exception:
-                    pass
 
     def _refresh_stats(self) -> None:
         """Fetch the latest stats snapshot."""

@@ -6,7 +6,7 @@ and validate ~/.crabpot/crabpot.yml.
 
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 import yaml
 
@@ -31,7 +31,7 @@ class SecurityConfig:
     """Security preset and per-feature overrides."""
 
     preset: str = "standard"
-    overrides: Dict[str, Optional[bool]] = field(default_factory=dict)
+    overrides: dict[str, Optional[bool]] = field(default_factory=dict)
 
 
 @dataclass
@@ -81,9 +81,9 @@ class CrabPotConfig:
 # ── Validation ─────────────────────────────────────────────────────────
 
 
-def validate_config(config: CrabPotConfig) -> List[str]:
+def validate_config(config: CrabPotConfig) -> list[str]:
     """Validate a CrabPotConfig, returning a list of error messages (empty = valid)."""
-    errors: List[str] = []
+    errors: list[str] = []
 
     if config.target not in ("docker", "wsl2"):
         errors.append(f"Invalid target '{config.target}'. Must be 'docker' or 'wsl2'.")
@@ -120,12 +120,12 @@ def validate_config(config: CrabPotConfig) -> List[str]:
 # ── Serialisation helpers ──────────────────────────────────────────────
 
 
-def _config_to_dict(config: CrabPotConfig) -> Dict[str, Any]:
+def _config_to_dict(config: CrabPotConfig) -> dict[str, Any]:
     """Convert a CrabPotConfig to a plain dict suitable for YAML output."""
     return asdict(config)
 
 
-def _dict_to_config(data: Dict[str, Any]) -> CrabPotConfig:
+def _dict_to_config(data: dict[str, Any]) -> CrabPotConfig:
     """Build a CrabPotConfig from a plain dict (e.g. parsed YAML)."""
     if not isinstance(data, dict):
         return CrabPotConfig()
