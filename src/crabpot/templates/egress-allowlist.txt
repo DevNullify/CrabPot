@@ -1,0 +1,39 @@
+# CrabPot Egress Allowlist
+# ========================
+# One domain per line. Wildcards: *.example.com matches sub.example.com
+# Lines starting with ! are explicitly blocked (even if matched by an allow rule).
+# Lines starting with # are comments.
+#
+# Unknown domains not listed here will require human approval via the
+# dashboard or 'crabpot approve <domain>' before the connection is allowed.
+
+# ── AI API providers ──────────────────────────────────────────────────────────
+api.openai.com
+api.anthropic.com
+api.together.xyz
+api.cohere.com
+generativelanguage.googleapis.com
+
+# ── Package registries (for OpenClaw updates) ────────────────────────────────
+registry.npmjs.org
+*.npmjs.org
+
+# ── Messaging platform APIs (used by OpenClaw) ───────────────────────────────
+# Uncomment the platforms you use:
+# *.whatsapp.net
+# web.whatsapp.com
+# api.telegram.org
+# discord.com
+# gateway.discord.gg
+
+# ── Explicitly blocked (exfiltration/tunneling services) ─────────────────────
+!*.ngrok.io
+!*.ngrok-free.app
+!*.requestbin.com
+!*.pipedream.net
+!webhook.site
+!*.burpcollaborator.net
+!*.oastify.com
+!*.interact.sh
+!pastebin.com
+!hastebin.com
