@@ -12,7 +12,25 @@ If you're on WSL2, make sure Docker Desktop is installed and WSL integration is 
 
 ## Installation
 
-### One-Liner (Recommended)
+### Windows (Recommended)
+
+Open PowerShell as Administrator and run:
+
+```powershell
+irm https://raw.githubusercontent.com/DevNullify/crabpot/main/install.ps1 | iex
+```
+
+This handles the full chain automatically:
+
+1. Install/enable WSL2 (reboot required if not already enabled)
+2. Install Ubuntu if no WSL2 distro exists
+3. Run `install.sh` inside the distro to install Docker, Python, and CrabPot
+
+After a reboot (if needed), re-run the same command to continue where it left off.
+
+### Linux / Existing WSL2 Shell
+
+If you already have a WSL2 terminal or are on native Linux:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/DevNullify/crabpot/main/install.sh | sh

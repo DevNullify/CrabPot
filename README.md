@@ -15,15 +15,23 @@ CrabPot solves this by providing a **hardened, monitored sandbox** with configur
 
 ## Quick Start
 
+**Windows (PowerShell as Administrator):**
+```powershell
+irm https://raw.githubusercontent.com/DevNullify/crabpot/main/install.ps1 | iex
+```
+
+This handles everything: installs WSL2 if needed, installs Ubuntu, then installs CrabPot inside it.
+
+**Linux / existing WSL2 shell:**
 ```bash
-# Install (one-liner)
 curl -fsSL https://raw.githubusercontent.com/DevNullify/crabpot/main/install.sh | sh
+```
 
-# Interactive setup wizard
+Then:
+```bash
 crabpot init      # Choose target (Docker/WSL2), security preset, OpenClaw version
-
-# Launch
-crabpot start     # Launch everything with your chosen configuration
+crabpot setup     # Generate configs + build
+crabpot start     # Launch everything
 ```
 
 `crabpot init` walks you through target selection (Docker or WSL2), security level (minimal, standard, or paranoid), and OpenClaw version (latest, a pinned tag like v1.2.3, etc.). Your choices are saved to `~/.crabpot/crabpot.yml` and can be changed at any time with `crabpot config`.
