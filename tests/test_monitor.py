@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from crabpot.monitor import SecurityMonitor, SUSPICIOUS_PROCESSES
+from crabpot.security_presets import SecurityProfile, resolve_profile
 
 
 @pytest.fixture
@@ -43,10 +44,12 @@ def mock_alerts():
 
 @pytest.fixture
 def monitor(mock_dm, mock_alerts):
-    """Create a SecurityMonitor with mocks."""
+    """Create a SecurityMonitor with mocks (standard preset)."""
+    profile, _ = resolve_profile("standard")
     return SecurityMonitor(
         docker_manager=mock_dm,
         alert_dispatcher=mock_alerts,
+        security_profile=profile,
         cpu_sustain_seconds=2,
     )
 
@@ -63,9 +66,10 @@ def _wait_for_alert(mock_alerts, severity, source, timeout=10):
 
 
 class TestSecurityMonitor:
-    def test_start_creates_threads(self, monitor):
+    def test_start_creates_threads_standard(self, monitor):
+        """Standard: stats + logs + health + events = 4 watchers."""
         monitor.start()
-        assert len(monitor._threads) == 6
+        assert len(monitor._threads) == 4
         monitor.stop()
 
     def test_stop_sets_event(self, monitor):
@@ -99,9 +103,11 @@ class TestSecurityMonitor:
             "timestamp": "",
         }
 
+        profile, _ = resolve_profile("standard")
         mon = SecurityMonitor(
             docker_manager=mock_dm,
             alert_dispatcher=mock_alerts,
+            security_profile=profile,
             cpu_sustain_seconds=1,
         )
         mon.start()
@@ -116,9 +122,12 @@ class TestSecurityMonitor:
             {"CMD": "/bin/bash"},
         ]
 
+        # Need process_watchdog enabled
+        profile, _ = resolve_profile("paranoid")
         mon = SecurityMonitor(
             docker_manager=mock_dm,
             alert_dispatcher=mock_alerts,
+            security_profile=profile,
         )
         mon.start()
         assert _wait_for_alert(mock_alerts, "CRITICAL", "processes"), \
@@ -129,9 +138,11 @@ class TestSecurityMonitor:
         """Test that consecutive unhealthy checks fire CRITICAL."""
         mock_dm.get_health.return_value = "unhealthy"
 
+        profile, _ = resolve_profile("standard")
         mon = SecurityMonitor(
             docker_manager=mock_dm,
             alert_dispatcher=mock_alerts,
+            security_profile=profile,
         )
         mon._consecutive_unhealthy = 1
         mon.start()
@@ -140,12 +151,14 @@ class TestSecurityMonitor:
         mon.stop()
 
     def test_auto_pause_on_critical(self, mock_dm, mock_alerts):
-        """Test that CRITICAL alerts trigger auto-pause."""
+        """Test that CRITICAL alerts trigger auto-pause when enabled."""
         mock_dm.get_top.return_value = [{"CMD": "/bin/sh"}]
 
+        profile, _ = resolve_profile("paranoid")
         mon = SecurityMonitor(
             docker_manager=mock_dm,
             alert_dispatcher=mock_alerts,
+            security_profile=profile,
         )
         mon.start()
         assert _wait_for_alert(mock_alerts, "CRITICAL", "processes"), \
@@ -153,6 +166,18 @@ class TestSecurityMonitor:
         mon.stop()
 
         mock_dm.pause.assert_called()
+
+    def test_auto_pause_disabled_in_minimal(self, mock_dm, mock_alerts):
+        """Test that auto-pause doesn't trigger in minimal preset."""
+        profile, _ = resolve_profile("minimal")
+        mon = SecurityMonitor(
+            docker_manager=mock_dm,
+            alert_dispatcher=mock_alerts,
+            security_profile=profile,
+        )
+        # Directly call _auto_pause — it should be a no-op
+        mon._auto_pause("test reason")
+        mock_dm.pause.assert_not_called()
 
     def test_memory_alert_has_cooldown(self, mock_dm, mock_alerts):
         """Test that memory alerts don't fire every 2 seconds."""
@@ -167,9 +192,11 @@ class TestSecurityMonitor:
             "timestamp": "",
         }
 
+        profile, _ = resolve_profile("standard")
         mon = SecurityMonitor(
             docker_manager=mock_dm,
             alert_dispatcher=mock_alerts,
+            security_profile=profile,
         )
         mon.start()
         assert _wait_for_alert(mock_alerts, "WARNING", "stats"), \
@@ -191,9 +218,12 @@ class TestSecurityMonitor:
             "ESTAB 0 0 172.17.0.2:18789 8.8.8.8:443"
         )
 
+        # Need network_auditor enabled
+        profile, _ = resolve_profile("paranoid")
         mon = SecurityMonitor(
             docker_manager=mock_dm,
             alert_dispatcher=mock_alerts,
+            security_profile=profile,
         )
         mon.start()
         assert _wait_for_alert(mock_alerts, "WARNING", "network"), \
@@ -206,3 +236,91 @@ class TestSecurityMonitor:
             if c[0][0] == "WARNING" and c[0][1] == "network"
         ]
         assert len(network_alerts) == 1
+
+
+class TestConditionalWatchers:
+    def test_minimal_starts_zero_watchers(self, mock_dm, mock_alerts):
+        """Minimal preset: all features off → 0 threads."""
+        profile, _ = resolve_profile("minimal")
+        mon = SecurityMonitor(
+            docker_manager=mock_dm,
+            alert_dispatcher=mock_alerts,
+            security_profile=profile,
+        )
+        mon.start()
+        assert len(mon._threads) == 0
+        mon.stop()
+
+    def test_standard_starts_four_watchers(self, mock_dm, mock_alerts):
+        """Standard: stats + logs + health + events = 4 watchers."""
+        profile, _ = resolve_profile("standard")
+        mon = SecurityMonitor(
+            docker_manager=mock_dm,
+            alert_dispatcher=mock_alerts,
+            security_profile=profile,
+        )
+        mon.start()
+        assert len(mon._threads) == 4
+        thread_names = {t.name for t in mon._threads}
+        assert "monitor-stats" in thread_names
+        assert "monitor-logs" in thread_names
+        assert "monitor-health" in thread_names
+        assert "monitor-events" in thread_names
+        mon.stop()
+
+    def test_paranoid_starts_all_six_watchers(self, mock_dm, mock_alerts):
+        """Paranoid: stats + processes + network + logs + health + events = 6."""
+        profile, _ = resolve_profile("paranoid")
+        mon = SecurityMonitor(
+            docker_manager=mock_dm,
+            alert_dispatcher=mock_alerts,
+            security_profile=profile,
+        )
+        mon.start()
+        assert len(mon._threads) == 6
+        thread_names = {t.name for t in mon._threads}
+        assert "monitor-stats" in thread_names
+        assert "monitor-processes" in thread_names
+        assert "monitor-network" in thread_names
+        assert "monitor-logs" in thread_names
+        assert "monitor-health" in thread_names
+        assert "monitor-events" in thread_names
+        mon.stop()
+
+    def test_custom_profile_selective_watchers(self, mock_dm, mock_alerts):
+        """Custom: only log_scanner → logs + health + events = 3."""
+        profile = SecurityProfile(
+            resource_limits=False,
+            process_watchdog=False,
+            network_auditor=False,
+            log_scanner=True,
+        )
+        mon = SecurityMonitor(
+            docker_manager=mock_dm,
+            alert_dispatcher=mock_alerts,
+            security_profile=profile,
+        )
+        mon.start()
+        assert len(mon._threads) == 3
+        thread_names = {t.name for t in mon._threads}
+        assert "monitor-logs" in thread_names
+        assert "monitor-health" in thread_names
+        assert "monitor-events" in thread_names
+        mon.stop()
+
+    def test_no_info_alert_when_no_watchers(self, mock_dm, mock_alerts):
+        """When no watchers start, no 'monitor started' alert fires."""
+        profile, _ = resolve_profile("minimal")
+        mon = SecurityMonitor(
+            docker_manager=mock_dm,
+            alert_dispatcher=mock_alerts,
+            security_profile=profile,
+        )
+        mon.start()
+        mon.stop()
+        # Should NOT have fired the "Security monitor started" alert
+        info_alerts = [
+            c for c in mock_alerts.fire.call_args_list
+            if c[0][0] == "INFO" and "monitor" in c[0][1]
+        ]
+        assert len(info_alerts) == 0

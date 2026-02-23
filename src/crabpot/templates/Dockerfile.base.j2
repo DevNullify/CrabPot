@@ -1,0 +1,9 @@
+FROM openclaw/openclaw:{{ openclaw_tag }}
+
+# ── Create data directory for persistence ─────────────────
+RUN mkdir -p /app/data && chown 1000:1000 /app/data
+
+# ── Run as non-root ───────────────────────────────────────
+USER 1000:1000
+
+EXPOSE 18789

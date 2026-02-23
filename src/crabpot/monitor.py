@@ -1,4 +1,4 @@
-"""SecurityMonitor — 6-channel real-time security monitoring daemon."""
+"""SecurityMonitor — conditional real-time security monitoring daemon."""
 
 import logging
 import re
@@ -9,7 +9,7 @@ from typing import Optional
 from docker.errors import APIError, NotFound
 
 from crabpot.alerts import AlertDispatcher
-from crabpot.docker_manager import DockerManager
+from crabpot.security_presets import SecurityProfile
 
 logger = logging.getLogger(__name__)
 
@@ -48,27 +48,28 @@ MEMORY_ALERT_COOLDOWN = 60
 
 
 class SecurityMonitor:
-    """6-channel real-time security monitoring daemon.
+    """Conditional real-time security monitoring daemon.
 
-    Channels:
-        1. Stats — CPU/memory via Docker stats API (2s)
-        2. Processes — Suspicious process detection via docker top (15s)
-        3. Network — Connection auditing via ss/netstat (30s)
-        4. Logs — Real-time log pattern scanning (streaming)
-        5. Health — Healthcheck monitoring (30s)
-        6. Events — Docker lifecycle events (streaming)
+    Channels are spawned based on the SecurityProfile:
+        - stats: Always on if resource_limits is True
+        - processes: Only if process_watchdog is True
+        - network: Only if network_auditor is True
+        - logs: Only if log_scanner is True
+        - health + events: Always on if any watcher is active
     """
 
     def __init__(
         self,
-        docker_manager: DockerManager,
+        docker_manager,
         alert_dispatcher: AlertDispatcher,
+        security_profile: Optional[SecurityProfile] = None,
         cpu_threshold: float = 80.0,
         memory_threshold: float = 85.0,
         cpu_sustain_seconds: int = 30,
     ):
         self.dm = docker_manager
         self.alerts = alert_dispatcher
+        self.profile = security_profile or SecurityProfile()
         self.cpu_threshold = cpu_threshold
         self.memory_threshold = memory_threshold
         self.cpu_sustain_seconds = cpu_sustain_seconds
@@ -91,25 +92,34 @@ class SecurityMonitor:
         self._consecutive_unhealthy = 0
 
     def start(self) -> None:
-        """Spawn all 6 watcher threads."""
+        """Spawn watcher threads based on the security profile."""
         self._stop_event.clear()
         self._paused.clear()
 
-        watchers = [
-            ("stats", self._watch_stats),
-            ("processes", self._watch_processes),
-            ("network", self._watch_network),
-            ("logs", self._watch_logs),
-            ("health", self._watch_health),
-            ("events", self._watch_events),
-        ]
+        watchers = []
+
+        if self.profile.resource_limits:
+            watchers.append(("stats", self._watch_stats))
+        if self.profile.process_watchdog:
+            watchers.append(("processes", self._watch_processes))
+        if self.profile.network_auditor:
+            watchers.append(("network", self._watch_network))
+        if self.profile.log_scanner:
+            watchers.append(("logs", self._watch_logs))
+
+        # Health and events always run if any monitoring is active
+        if watchers:
+            watchers.append(("health", self._watch_health))
+            watchers.append(("events", self._watch_events))
 
         for name, target in watchers:
             t = threading.Thread(target=target, name=f"monitor-{name}", daemon=True)
             t.start()
             self._threads.append(t)
 
-        self.alerts.fire("INFO", "monitor", "Security monitor started (6 channels)")
+        channel_count = len(self._threads)
+        if channel_count > 0:
+            self.alerts.fire("INFO", "monitor", f"Security monitor started ({channel_count} channels)")
 
     def stop(self) -> None:
         """Signal all watcher threads to stop."""
@@ -142,7 +152,9 @@ class SecurityMonitor:
         return self._stop_event.wait(timeout=seconds)
 
     def _auto_pause(self, reason: str) -> None:
-        """Auto-freeze the container on CRITICAL alert."""
+        """Auto-freeze the container on CRITICAL alert (if enabled)."""
+        if not self.profile.auto_pause_on_critical:
+            return
         try:
             self.dm.pause()
             self.alerts.fire(

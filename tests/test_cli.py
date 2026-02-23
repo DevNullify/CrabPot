@@ -21,16 +21,27 @@ class TestDispatch:
 
 
 class TestCmdInit:
+    @patch("crabpot.config.save_config")
     @patch("crabpot.docker_manager.DockerManager.check_docker")
-    def test_init_all_ok(self, mock_check, capsys):
+    def test_init_non_interactive(self, mock_check, mock_save, tmp_path):
         mock_check.return_value = {
             "installed": True,
             "running": True,
             "compose": True,
             "version": "Docker version 24.0.7",
         }
-        args = argparse.Namespace(command="init")
-        dispatch(args)
+        args = argparse.Namespace(
+            command="init",
+            target="docker",
+            preset="standard",
+            openclaw_tag="latest",
+            non_interactive=True,
+        )
+        with patch("crabpot.cli.CONFIG_FILE", tmp_path / "crabpot.yml"), \
+             patch("crabpot.cli.CONFIG_DIR", tmp_path / "config"), \
+             patch("crabpot.cli.DATA_DIR", tmp_path / "data"):
+            dispatch(args)
+        mock_save.assert_called_once()
 
     @patch("crabpot.docker_manager.DockerManager.check_docker")
     def test_init_no_docker(self, mock_check):
@@ -40,8 +51,37 @@ class TestCmdInit:
             "compose": False,
             "version": "",
         }
-        args = argparse.Namespace(command="init")
+        args = argparse.Namespace(
+            command="init",
+            target="docker",
+            preset="standard",
+            openclaw_tag="latest",
+            non_interactive=True,
+        )
         with pytest.raises(SystemExit):
+            dispatch(args)
+
+
+class TestCmdConfig:
+    def test_config_show_no_file(self, tmp_path, capsys):
+        args = argparse.Namespace(command="config", action="show")
+        with patch("crabpot.cli.CONFIG_FILE", tmp_path / "missing.yml"):
+            dispatch(args)
+
+    def test_config_reset(self, tmp_path):
+        config_file = tmp_path / "crabpot.yml"
+        args = argparse.Namespace(command="config", action="reset")
+        with patch("crabpot.cli.CONFIG_FILE", config_file):
+            dispatch(args)
+        assert config_file.exists()
+        content = config_file.read_text()
+        assert "standard" in content
+
+    def test_config_show_with_file(self, tmp_path, capsys):
+        config_file = tmp_path / "crabpot.yml"
+        config_file.write_text("target: docker\nsecurity:\n  preset: paranoid\n")
+        args = argparse.Namespace(command="config", action="show")
+        with patch("crabpot.cli.CONFIG_FILE", config_file):
             dispatch(args)
 
 

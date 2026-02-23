@@ -20,15 +20,19 @@ class DashboardServer:
     """Web dashboard serving at http://localhost:9876 with real-time WebSocket updates."""
 
     def __init__(
-        self, docker_manager, alert_dispatcher, security_monitor,
-        action_gate=None, egress_policy=None, port=9876,
+        self, docker_manager=None, alert_dispatcher=None, security_monitor=None,
+        action_gate=None, egress_policy=None, port=9876, runtime=None,
+        target="docker", security_preset="standard",
     ):
-        self.dm = docker_manager
+        # Accept either runtime or docker_manager for backward compatibility
+        self.dm = runtime or docker_manager
         self.alerts = alert_dispatcher
         self.monitor = security_monitor
         self.gate = action_gate
         self.egress_policy = egress_policy
         self.port = port
+        self.target = target
+        self.security_preset = security_preset
 
         self.app = Flask(__name__)
         self.app.config["SECRET_KEY"] = secrets.token_hex(32)
@@ -87,6 +91,8 @@ class DashboardServer:
                 "stats": stats,
                 "alert_counts": alert_counts,
                 "uptime": self._get_uptime(),
+                "target": self.target,
+                "security_preset": self.security_preset,
             }
 
             if self.gate:

@@ -1,0 +1,37 @@
+[Unit]
+Description=CrabPot OpenClaw Service
+After=network.target
+
+[Service]
+Type=simple
+User=crabpot
+Group=crabpot
+WorkingDirectory=/app
+ExecStart=/app/openclaw
+Restart=on-failure
+RestartSec=5
+
+{% if no_new_privileges %}
+NoNewPrivileges=true
+{% endif %}
+
+{% if read_only_rootfs %}
+ProtectSystem=strict
+ReadWritePaths=/app/data /tmp /run
+{% endif %}
+
+{% if seccomp_profile %}
+SystemCallFilter=@system-service
+SystemCallFilter=~@mount @reboot @swap @clock @module @raw-io
+{% endif %}
+
+{% if resource_limits %}
+CPUQuota={{ cpu_limit }}00%
+MemoryMax={{ memory_limit }}
+{% if pid_limit %}
+TasksMax={{ pids_limit }}
+{% endif %}
+{% endif %}
+
+[Install]
+WantedBy=multi-user.target

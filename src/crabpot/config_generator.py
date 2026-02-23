@@ -1,38 +1,56 @@
-"""Generates hardened Docker configuration files for CrabPot."""
+"""Generates Docker configuration files for CrabPot."""
 
 import shutil
+from dataclasses import asdict
 from pathlib import Path
+from typing import Optional
 
 from jinja2 import BaseLoader, Environment
 
 from crabpot.paths import CONFIG_DIR, EGRESS_PROXY_PORT
-
-DEFAULT_CPU_LIMIT = "2"
-DEFAULT_MEMORY_LIMIT = "2g"
-DEFAULT_PIDS_LIMIT = 200
+from crabpot.security_presets import ResourceProfile, SecurityProfile, resolve_profile
 
 
 class ConfigGenerator:
-    """Generates docker-compose.yml, Dockerfile, seccomp profile, and .env."""
+    """Generates docker-compose.yml, optional Dockerfile, seccomp profile, and .env."""
 
     def __init__(
         self,
         config_dir: Path = CONFIG_DIR,
-        cpu_limit: str = DEFAULT_CPU_LIMIT,
-        memory_limit: str = DEFAULT_MEMORY_LIMIT,
-        pids_limit: int = DEFAULT_PIDS_LIMIT,
+        security_profile: Optional[SecurityProfile] = None,
+        resource_profile: Optional[ResourceProfile] = None,
+        openclaw_tag: str = "latest",
+        egress_proxy_port: int = EGRESS_PROXY_PORT,
     ):
         self.config_dir = config_dir
-        self.cpu_limit = cpu_limit
-        self.memory_limit = memory_limit
-        self.pids_limit = pids_limit
+        self.openclaw_tag = openclaw_tag
+        self.egress_proxy_port = egress_proxy_port
         self.jinja_env = Environment(loader=BaseLoader(), keep_trailing_newline=True)
+
+        if security_profile is None or resource_profile is None:
+            default_sec, default_res = resolve_profile("standard")
+            self.security_profile = security_profile or default_sec
+            self.resource_profile = resource_profile or default_res
+        else:
+            self.security_profile = security_profile
+            self.resource_profile = resource_profile
+
+    @classmethod
+    def from_defaults(cls, config_dir: Path = CONFIG_DIR) -> "ConfigGenerator":
+        """Create a ConfigGenerator using the standard preset (v1 backward compat)."""
+        sec, res = resolve_profile("standard")
+        return cls(config_dir=config_dir, security_profile=sec, resource_profile=res)
 
     def generate_all(self) -> None:
         """Generate all configuration files to the config directory."""
         self.config_dir.mkdir(parents=True, exist_ok=True)
-        self._generate_seccomp_profile()
-        self._generate_dockerfile()
+
+        if self.security_profile.seccomp_profile:
+            self._generate_seccomp_profile()
+
+        if self.security_profile.hardened_image:
+            self._generate_dockerfile()
+
         self._generate_compose()
         self._generate_env_file()
         self._generate_egress_allowlist()
@@ -49,26 +67,34 @@ class ConfigGenerator:
         shutil.copy2(src, dst)
 
     def _generate_dockerfile(self) -> None:
-        """Render and write the hardened Dockerfile."""
-        template_str = self._read_template("Dockerfile.j2")
+        """Render and write the hardened Dockerfile.
+
+        Only called when hardened_image=True in the security profile.
+        """
+        template_str = self._read_template("Dockerfile.hardened.j2")
         template = self.jinja_env.from_string(template_str)
-        rendered = template.render()
+        rendered = template.render(openclaw_tag=self.openclaw_tag)
         (self.config_dir / "Dockerfile.crabpot").write_text(rendered)
 
     def _generate_compose(self) -> None:
-        """Render and write the docker-compose.yml with security settings."""
+        """Render and write the docker-compose.yml with conditional security settings."""
         template_str = self._read_template("docker-compose.yml.j2")
         template = self.jinja_env.from_string(template_str)
 
         seccomp_path = str(self.config_dir / "seccomp-profile.json")
 
-        rendered = template.render(
-            seccomp_path=seccomp_path,
-            cpu_limit=self.cpu_limit,
-            memory_limit=self.memory_limit,
-            pids_limit=self.pids_limit,
-            egress_proxy_port=EGRESS_PROXY_PORT,
-        )
+        # Build template context from profile flags + resource values
+        context = asdict(self.security_profile)
+        context.update({
+            "openclaw_tag": self.openclaw_tag,
+            "seccomp_path": seccomp_path,
+            "cpu_limit": self.resource_profile.cpu_limit,
+            "memory_limit": self.resource_profile.memory_limit,
+            "pids_limit": self.resource_profile.pids_limit,
+            "egress_proxy_port": self.egress_proxy_port,
+        })
+
+        rendered = template.render(**context)
         (self.config_dir / "docker-compose.yml").write_text(rendered)
 
     def _generate_egress_allowlist(self) -> None:
@@ -102,8 +128,12 @@ class ConfigGenerator:
         """Return a summary of the current configuration."""
         return {
             "config_dir": str(self.config_dir),
-            "cpu_limit": self.cpu_limit,
-            "memory_limit": self.memory_limit,
-            "pids_limit": self.pids_limit,
-            "files": [f.name for f in self.config_dir.iterdir()] if self.config_dir.exists() else [],
+            "cpu_limit": self.resource_profile.cpu_limit,
+            "memory_limit": self.resource_profile.memory_limit,
+            "pids_limit": self.resource_profile.pids_limit,
+            "security_preset": "custom",
+            "hardened_image": self.security_profile.hardened_image,
+            "files": (
+                [f.name for f in self.config_dir.iterdir()] if self.config_dir.exists() else []
+            ),
         }

@@ -3,9 +3,13 @@ version: "3.8"
 services:
   crabpot:
     container_name: crabpot
+{% if hardened_image %}
     build:
       context: .
       dockerfile: Dockerfile.crabpot
+{% else %}
+    image: openclaw/openclaw:{{ openclaw_tag }}
+{% endif %}
     restart: unless-stopped
 
     # ── Network ──────────────────────────────────────────
@@ -14,24 +18,35 @@ services:
     networks:
       - crabpot_net
 
+{% if read_only_rootfs %}
     # ── Filesystem hardening ─────────────────────────────
     read_only: true
     tmpfs:
       - /tmp:size=256m,noexec,nosuid
       - /run:size=64m,noexec,nosuid
 
+{% endif %}
     # ── User ─────────────────────────────────────────────
     user: "1000:1000"
 
     # ── Security options ─────────────────────────────────
+{% if drop_all_caps %}
     cap_drop:
       - ALL
     cap_add:
       - NET_BIND_SERVICE
+{% endif %}
+{% if no_new_privileges or seccomp_profile %}
     security_opt:
+{% if no_new_privileges %}
       - no-new-privileges:true
+{% endif %}
+{% if seccomp_profile %}
       - seccomp={{ seccomp_path }}
+{% endif %}
+{% endif %}
 
+{% if resource_limits %}
     # ── Resource limits ──────────────────────────────────
     deploy:
       resources:
@@ -40,8 +55,12 @@ services:
           memory: {{ memory_limit }}
         reservations:
           memory: 256m
+{% endif %}
+{% if pid_limit %}
     pids_limit: {{ pids_limit }}
+{% endif %}
 
+{% if egress_proxy %}
     # ── Egress proxy (routes all traffic through CrabPot policy engine) ──
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -49,6 +68,7 @@ services:
       - HTTP_PROXY=http://host.docker.internal:{{ egress_proxy_port }}
       - HTTPS_PROXY=http://host.docker.internal:{{ egress_proxy_port }}
       - NO_PROXY=localhost,127.0.0.1
+{% endif %}
 
     # ── Environment ──────────────────────────────────────
     env_file:

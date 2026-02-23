@@ -274,6 +274,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     <span class="connection-status ws-disconnected" id="ws-status"></span>
     <span class="badge badge-unknown" id="state-badge">CONNECTING</span>
     <span class="uptime" id="uptime">--</span>
+    <span class="uptime" id="deploy-info" style="margin-left:8px;color:var(--accent);">--</span>
     <span class="links">
       <a href="http://localhost:18789" target="_blank">Gateway UI</a>
     </span>
@@ -503,6 +504,11 @@ socket.on('status', function(data) {
 
   if (data.uptime) {
     document.getElementById('uptime').textContent = data.uptime;
+  }
+
+  if (data.target || data.security_preset) {
+    var info = (data.target || 'docker') + ' / ' + (data.security_preset || 'standard');
+    document.getElementById('deploy-info').textContent = info;
   }
 });
 

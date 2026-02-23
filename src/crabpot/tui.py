@@ -11,16 +11,15 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from crabpot.alerts import AlertDispatcher
-from crabpot.docker_manager import DockerManager
 from crabpot.utils import format_uptime
 
 
 class TUI:
     """Interactive terminal dashboard using Rich."""
 
-    def __init__(self, docker_manager: DockerManager, alert_dispatcher: AlertDispatcher):
-        self.dm = docker_manager
+    def __init__(self, docker_manager=None, alert_dispatcher=None, runtime=None):
+        # Accept either runtime or docker_manager for backward compatibility
+        self.dm = runtime or docker_manager
         self.alerts = alert_dispatcher
         self.console = Console()
         self._running = True
